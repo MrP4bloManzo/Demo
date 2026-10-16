@@ -1,13 +1,13 @@
 # FieldConnect Group · Portal de operaciones
 
-Prototipo web estático para demostrar el flujo de tickets de ingeniería de campo entre **RRHH** e **IDC**.
+Prototipo web estático para demostrar el flujo de tickets de ingeniería de campo entre **Personal administrativo** e **IDC**.
 
 > **Importante:** es una demo frontend. El inicio de sesión acepta credenciales de demostración, y los tickets se guardan en el almacenamiento del navegador. No hay backend, control de acceso real ni sincronización entre dispositivos. No introduzcas información real de clientes, contactos, domicilios, credenciales o sitios.
 
 ## Funciones incluidas
 
-- Vista de acceso con selección de perfil RRHH / IDC.
-- RRHH puede crear tickets, publicarlos para los IDC o asignarlos directamente.
+- Vista de acceso con selección de perfil Personal administrativo / IDC.
+- Personal administrativo puede crear tickets, publicarlos para los IDC o asignarlos directamente.
 - Los IDC pueden consultar servicios disponibles, tomar tickets y actualizar sus propios servicios.
 - Flujo de estados, checklist de cierre, nota de resultado y registro de evidencia.
 - Historial de movimientos por ticket.
@@ -45,7 +45,7 @@ Abre `http://localhost:8000` desde el directorio del proyecto. También puedes a
 
 ### Perfiles de demostración
 
-- **RRHH:** usuario `rrhh`.
+- **Personal administrativo:** usuario `admin`.
 - **IDC:** elige IDC-001, IDC-002 o IDC-003 en el selector de perfil.
 - **Contraseña:** cualquier valor no vacío sirve en esta demo.
 
@@ -83,3 +83,21 @@ Sustituye `USUARIO/REPOSITORIO` por el destino real.
 GitHub Pages publica archivos estáticos. No convierte el login en autenticación real ni comparte tickets entre usuarios o teléfonos. `localStorage` y `sessionStorage` pertenecen al navegador/origen de cada usuario. Para una operación real se requiere backend, base de datos, autenticación y autorización por roles, control concurrente al tomar tickets y almacenamiento seguro de evidencias.
 
 Los datos iniciales del tablero son ejemplos ficticios. Revisa también los tickets creados durante las pruebas antes de publicar capturas o respaldos.
+
+
+## Flujo de los tres perfiles
+
+1. **Personal administrativo** publica un ticket.
+2. **Ingeniería de apoyo** inicia sesión, toma el ticket y coordina remotamente la logística.
+3. El ticket aparece en la bandeja de **IDC** únicamente cuando ya tiene `supportEngineerId`; entonces un IDC puede tomarlo.
+
+Perfiles de demostración: `admin` para personal administrativo; `APOYO-001` o `APOYO-002` para ingeniería de apoyo; `IDC-001`, `IDC-002` o `IDC-003` para ingenieros de campo. La contraseña es demostrativa y no protege un sitio publicado.
+
+
+## Flujo de trabajo de tres perfiles
+
+- **Personal administrativo** (`admin`): crea y publica el ticket.
+- **Ingeniero de apoyo** (`APOYO-001` o `APOYO-002`): toma el ticket para coordinar remotamente la logística.
+- **IDC** (`IDC-001`, `IDC-002` o `IDC-003`): solo ve tickets que ya tienen un ingeniero de apoyo y puede tomar uno para asistir en campo.
+
+La contraseña es demostrativa y cualquier valor permite entrar. No publiques datos de clientes reales: GitHub Pages publica la interfaz y no proporciona autenticación segura ni base de datos compartida. Los datos de esta demo se guardan en el almacenamiento local del navegador.

@@ -307,3 +307,9 @@ input::placeholder,textarea::placeholder{color:#a0a8b5}
 }
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*::before,*::after{transition:none!important;animation:none!important}}
 
+
+/* Roles de acceso: tres perfiles operativos */
+.role-choice-three{grid-template-columns:repeat(3,minmax(0,1fr))}
+.role-choice-three .role-card{min-height:138px;padding:13px 11px}
+.role-choice-three .role-card strong{line-height:1.3}
+@media(max-width:980px){.role-choice-three{grid-template-columns:1fr}}
