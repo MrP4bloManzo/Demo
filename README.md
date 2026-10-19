@@ -1,103 +1,117 @@
-# FieldConnect Group · Portal de operaciones
+# FieldConnect Group · Portal operativo con Supabase
 
-Prototipo web estático para demostrar el flujo de tickets de ingeniería de campo entre **Personal administrativo** e **IDC**.
+Versión de migración del prototipo FieldConnect Group. Conserva la interfaz, los tres perfiles operativos y el flujo de tickets, reemplazando el almacenamiento local por Supabase Auth, PostgreSQL, RLS, RPC y Storage privado.
 
-> **Importante:** es una demo frontend. El inicio de sesión acepta credenciales de demostración, y los tickets se guardan en el almacenamiento del navegador. No hay backend, control de acceso real ni sincronización entre dispositivos. No introduzcas información real de clientes, contactos, domicilios, credenciales o sitios.
+## Qué incluye
 
-## Funciones incluidas
-
-- Vista de acceso con selección de perfil Personal administrativo / IDC.
-- Personal administrativo puede crear tickets, publicarlos para los IDC o asignarlos directamente.
-- Los IDC pueden consultar servicios disponibles, tomar tickets y actualizar sus propios servicios.
-- Flujo de estados, checklist de cierre, nota de resultado y registro de evidencia.
-- Historial de movimientos por ticket.
-- Plantillas de trabajo para tipos de servicio frecuentes.
-- Filtros y búsqueda, exportación CSV y respaldo/restauración JSON.
-- Persistencia local y actualización entre pestañas que compartan el mismo origen y almacenamiento.
-- Diseño adaptable a escritorio y dispositivos móviles.
+- Inicio de sesión real por correo y contraseña mediante **Supabase Auth**.
+- Tres roles asignados en la base de datos: `HR`, `SUPPORT` e `IDC`. El selector de la pantalla solo comprueba el rol esperado; no concede permisos.
+- Tickets compartidos, con historial de movimientos y sincronización entre usuarios mediante Supabase Realtime.
+- Flujo predeterminado: Personal administrativo publica → Ingeniería de apoyo toma la logística → IDC toma el servicio.
+- Reclamación atómica de tickets mediante funciones SQL; dos usuarios no deberían poder tomar el mismo ticket.
+- Reglas de acceso RLS para perfiles, tickets y evidencias.
+- Evidencias reales en un bucket privado (`ticket-evidence`): JPEG, PNG, WebP o PDF, máximo 10 MB por archivo. Se requieren seis puntos del checklist, una nota y al menos una evidencia antes de cerrar un servicio como completado.
+- Exportación CSV de los tickets que el usuario autenticado tiene permiso para consultar.
+- Flujo de despliegue incluido para GitHub Pages.
 
 ## Estructura
 
 ```text
-fieldconnect-group-portal/
+fieldconnect-supabase/
 ├── index.html
 ├── README.md
-├── .gitignore
-├── .nojekyll
-└── assets/
-    ├── css/styles.css
-    ├── js/app.js
-    └── img/
-        ├── favicon.svg
-        ├── fieldconnect-mark.webp
-        └── login-background.jpg
+├── assets/
+│   ├── css/styles.css
+│   ├── js/app.js
+│   ├── js/supabase-config.js
+│   └── img/
+├── supabase/
+│   ├── migrations/20261019000100_fieldconnect_initial.sql
+│   └── examples/seed-profiles.example.sql
+└── .github/workflows/pages.yml
 ```
 
-## Probar localmente
+## Paso 1. Crear el proyecto Supabase
 
-La forma más segura de revisar rutas y estilos como en el hosting es servir el directorio con un servidor estático. Con Python instalado:
+1. Crea un proyecto nuevo en [Supabase](https://supabase.com/dashboard).
+2. Abre **SQL Editor → New query**.
+3. Copia y ejecuta todo el contenido de `supabase/migrations/20261019000100_fieldconnect_initial.sql`.
+4. Verifica que no haya errores. Esta migración crea tablas, índices, políticas RLS, funciones RPC, bucket privado y la suscripción de tickets a Realtime.
+
+No insertes una clave `service_role` ni una clave `secret` en los archivos del frontend. La aplicación web solo debe usar la URL y una **publishable key** (o la antigua `anon` key si ese es el formato disponible en tu proyecto).
+
+## Paso 2. Configurar el cliente del navegador
+
+1. En Supabase abre **Connect** o **Project Settings → API Keys**.
+2. Copia la **Project URL** y la **Publishable key**.
+3. Edita `assets/js/supabase-config.js` y reemplaza los dos valores de ejemplo:
+
+```js
+window.FIELD_CONNECT_SUPABASE = {
+  url: 'https://TU_PROJECT_REF.supabase.co',
+  publishableKey: 'TU_CLAVE_PUBLISHABLE_DE_SUPABASE'
+};
+```
+
+La URL y la publishable key son datos públicos del cliente. No publiques nunca las credenciales de base de datos, la `service_role` ni una `secret key`. Las políticas RLS son obligatorias y no deben desactivarse.
+
+## Paso 3. Crear cuentas y asignar perfiles
+
+No hay registro público desde la interfaz. El administrador crea cada usuario desde **Authentication → Users** y le asigna una contraseña. Después, edita `supabase/examples/seed-profiles.example.sql`: cambia los correos de ejemplo, los nombres y los códigos de empleado por los reales, y ejecútalo en SQL Editor.
+
+Perfiles admitidos:
+
+| Rol interno | Perfil visible |
+|---|---|
+| `HR` | Personal administrativo |
+| `SUPPORT` | Ingeniería de apoyo |
+| `IDC` | Ingeniero de campo |
+
+El archivo de ejemplo registra un usuario administrativo, dos ingenieros de apoyo y tres IDC. Si solo necesitas menos usuarios, elimina los bloques que no vayas a utilizar. Cada correo usado en el SQL debe corresponder a un usuario ya creado en Authentication.
+
+**Importante:** los perfiles operativos se guardan en `public.profiles`. El usuario no puede autoasignarse un rol ni modificar su perfil desde el frontend. Haz estos cambios únicamente desde el panel administrativo de Supabase.
+
+## Paso 4. Probar localmente
+
+Se recomienda servir los archivos por HTTP en vez de abrir el HTML como archivo. Desde la carpeta raíz del proyecto ejecuta:
 
 ```bash
 python -m http.server 8000
 ```
 
-Abre `http://localhost:8000` desde el directorio del proyecto. También puedes abrir `index.html` directamente, aunque se recomienda el servidor local.
+Abre `http://localhost:8000`, configura previamente `assets/js/supabase-config.js` y prueba con las cuentas que creaste en Supabase. Comprueba el flujo completo:
 
-### Perfiles de demostración
+1. `HR` crea un ticket.
+2. `SUPPORT` inicia sesión y pulsa **Tomar logística**.
+3. `IDC` ve ese ticket en **Servicios disponibles** y lo toma.
+4. `IDC` inicia el servicio, guarda el checklist y la nota, sube una evidencia y lo cierra.
+5. Abre FieldConnect en otro navegador o dispositivo y verifica que solo aparezcan los tickets permitidos para ese perfil.
 
-- **Personal administrativo:** usuario `admin`.
-- **IDC:** elige IDC-001, IDC-002 o IDC-003 en el selector de perfil.
-- **Contraseña:** cualquier valor no vacío sirve en esta demo.
+## Paso 5. Publicar en GitHub Pages
 
-Para reiniciar los ejemplos, cierra sesión y borra los datos del sitio desde las herramientas del navegador o elimina la clave `fielddesk_roles_tickets_v1` de `localStorage`. La sesión demo se guarda en `sessionStorage`.
+1. Crea un repositorio de GitHub y sube **el contenido** de esta carpeta a su raíz. `index.html` debe quedar en la raíz del repositorio.
+2. Configura `assets/js/supabase-config.js` con la URL y publishable key del proyecto que usarás para el sitio publicado.
+3. Haz commit y push a la rama `main`.
+4. En GitHub abre **Settings → Pages** y elige **Build and deployment → Source: GitHub Actions**.
+5. Abre la pestaña **Actions** y espera a que termine `Deploy FieldConnect to GitHub Pages`.
+6. Copia la URL publicada. En Supabase abre **Authentication → URL Configuration** y configura la URL del sitio como `Site URL`; añade también esa URL a los redirect URLs permitidos si vas a usar enlaces de invitación o recuperación de contraseña.
 
-## Publicar en GitHub Pages
+La configuración `supabase-config.js` contiene solamente valores públicos, así que se debe incluir en el despliegue. Si tu repositorio es público, cualquiera podrá ver la URL y la publishable key; eso es esperado. La seguridad proviene de Auth, permisos SQL y RLS, no de ocultar la clave pública.
 
-El repositorio incluye un workflow en `.github/workflows/pages.yml` que publica el sitio automáticamente cuando haces push a `main`.
+## Datos del prototipo anterior
 
-1. Crea un repositorio nuevo en GitHub. Para una prueba, puede ser privado si tu plan permite Pages con repositorios privados; si no, crea uno público y conserva exclusivamente información ficticia.
-2. Descomprime el proyecto y sube **el contenido de esta carpeta** a la raíz del repositorio. `index.html` debe quedar en la raíz, no dentro de otra carpeta anidada.
-3. En GitHub, abre **Settings → Pages** y configura **Build and deployment → Source: GitHub Actions**.
-4. Comprueba la pestaña **Actions**. El workflow se ejecuta al recibir cambios en la rama `main`; al terminar, su resumen muestra la URL de GitHub Pages.
-5. Abre esa URL para probar la app. Cada nuevo push a `main` volverá a publicar el sitio.
+Los tickets que existieran en `localStorage` del navegador no se importan automáticamente y los cuatro tickets de demostración del prototipo no se insertan en la base de datos. Revisa los datos previos antes de migrar información operativa real. Para una primera prueba, crea un ticket ficticio desde la nueva aplicación.
 
-Si prefieres no usar el workflow, puedes quitar `.github/workflows/pages.yml` y elegir `Deploy from a branch`, con la rama `main` y la carpeta `/(root)`.
+## Límites y próximos pasos recomendados
 
-### Publicar con Git
+- La interfaz es estática y se sirve desde GitHub Pages; las credenciales y autorización las gestiona Supabase.
+- Antes de usar datos sensibles de clientes, valida los permisos con cuentas de prueba de cada rol, activa la confirmación/recuperación de correo que necesite tu organización y acuerda políticas de copias de seguridad y retención.
+- Esta primera migración registra la evidencia en un bucket privado, pero todavía no incorpora OCR, firma de conformidad ni una función de generación de PDF.
+- Si la empresa necesita separar de forma estricta datos de contacto y domicilios de los tickets visibles antes de la asignación, conviene mover esos campos a una tabla restringida de detalles operativos en una siguiente migración.
+- No se ejecutó esta migración contra una instancia Supabase real porque todavía no existe tu proyecto. Primero crea el proyecto y ejecuta el SQL; después se debe probar con las cuentas reales de prueba.
 
-Desde la carpeta del proyecto, después de crear un repositorio vacío en GitHub:
+## Documentación oficial
 
-```bash
-git init
-git add .
-git commit -m "Initial FieldConnect portal prototype"
-git branch -M main
-git remote add origin https://github.com/USUARIO/REPOSITORIO.git
-git push -u origin main
-```
-
-Sustituye `USUARIO/REPOSITORIO` por el destino real.
-
-## Límites de esta versión
-
-GitHub Pages publica archivos estáticos. No convierte el login en autenticación real ni comparte tickets entre usuarios o teléfonos. `localStorage` y `sessionStorage` pertenecen al navegador/origen de cada usuario. Para una operación real se requiere backend, base de datos, autenticación y autorización por roles, control concurrente al tomar tickets y almacenamiento seguro de evidencias.
-
-Los datos iniciales del tablero son ejemplos ficticios. Revisa también los tickets creados durante las pruebas antes de publicar capturas o respaldos.
-
-
-## Flujo de los tres perfiles
-
-1. **Personal administrativo** publica un ticket.
-2. **Ingeniería de apoyo** inicia sesión, toma el ticket y coordina remotamente la logística.
-3. El ticket aparece en la bandeja de **IDC** únicamente cuando ya tiene `supportEngineerId`; entonces un IDC puede tomarlo.
-
-Perfiles de demostración: `admin` para personal administrativo; `APOYO-001` o `APOYO-002` para ingeniería de apoyo; `IDC-001`, `IDC-002` o `IDC-003` para ingenieros de campo. La contraseña es demostrativa y no protege un sitio publicado.
-
-
-## Flujo de trabajo de tres perfiles
-
-- **Personal administrativo** (`admin`): crea y publica el ticket.
-- **Ingeniero de apoyo** (`APOYO-001` o `APOYO-002`): toma el ticket para coordinar remotamente la logística.
-- **IDC** (`IDC-001`, `IDC-002` o `IDC-003`): solo ve tickets que ya tienen un ingeniero de apoyo y puede tomar uno para asistir en campo.
-
-La contraseña es demostrativa y cualquier valor permite entrar. No publiques datos de clientes reales: GitHub Pages publica la interfaz y no proporciona autenticación segura ni base de datos compartida. Los datos de esta demo se guardan en el almacenamiento local del navegador.
+- [Instalación de supabase-js (incluye CDN)](https://supabase.com/docs/reference/javascript/installing)
+- [Row Level Security](https://supabase.com/docs/guides/database/postgres/row-level-security)
+- [Migración de API keys a publishable/secret](https://supabase.com/docs/guides/getting-started/migrating-to-new-api-keys)

@@ -1,125 +1,767 @@
 'use strict';
-const DB_KEY='fielddesk_roles_tickets_v1';
-const SESSION_KEY='fielddesk_roles_session_v1';
-function demoDate(offset=0){const d=new Date();d.setHours(12,0,0,0);d.setDate(d.getDate()+offset);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
-const PEOPLE={
- 'IDC-001':{id:'IDC-001',name:'Ingeniero 1 (demo)',role:'IDC',title:'Ingeniero de campo'},
- 'IDC-002':{id:'IDC-002',name:'Técnico 2 (demo)',role:'IDC',title:'Ingeniero de campo'},
- 'IDC-003':{id:'IDC-003',name:'Ingeniero de campo 3 (demo)',role:'IDC',title:'Ingeniero de campo'},
- 'APOYO-001':{id:'APOYO-001',name:'Ingeniero de apoyo 1 (demo)',role:'SUPPORT',title:'Ingeniería de apoyo'},
- 'APOYO-002':{id:'APOYO-002',name:'Ingeniero de apoyo 2 (demo)',role:'SUPPORT',title:'Ingeniería de apoyo'}
-};
-const seed=[
- {id:'FCG-DEMO-0101',siteId:'DEMO-SITE-001',project:'Instalación de red local',client:'Cliente de demostración 01',site:'Sucursal de prueba 01',city:'Colima, Colima (demo)',address:'Domicilio ficticio para pruebas',contact:'Contacto de prueba 01',phone:'',type:'Instalación de APS',date:demoDate(4),time:'10:00',priority:'Alta',status:'Disponible',assignedTo:null,scope:'Instalar el punto de acceso en la ubicación autorizada, confirmar alimentación/conexión al switch y validar conectividad según el alcance del proyecto.',tools:'Laptop, cable UTP, desarmadores, escalera de tijera con alcance adecuado, taquetes, pijas de 1/4, tester, dos patch cords de 3 m y etiquetadora. Confirmar disponibilidad de EPP y equipo.',notes:'Ejemplo ilustrativo. Confirmar la dirección, el acceso, quién proporciona el AP y las condiciones de trabajo en altura.',fee:null,travel:300,payStatus:'Acordado',checklist:{},evidence:0,closeNote:'',logs:[{title:'Ticket publicado por RRHH',at:new Date().toLocaleString('es-MX',{dateStyle:'short',timeStyle:'short'}),desc:'Disponible para que un IDC lo revise y tome.'}]},
- {id:'FCG-DEMO-0102',siteId:'DEMO-SITE-002',project:'Activación de enlace de prueba',client:'Cliente de demostración 02',site:'Centro de prueba 02',city:'Zona costera (demo)',address:'Domicilio ficticio para pruebas',contact:'Contacto de prueba 02',phone:'',type:'Activación de enlace',date:demoDate(3),time:'09:30',priority:'Normal',status:'Asignado',assignedTo:'IDC-001',supportEngineerId:'APOYO-001',scope:'Verificar el equipo Cisco, realizar la actividad de activación autorizada y documentar las pruebas de conectividad definidas por coordinación.',tools:'Laptop, cable UTP, cable de consola compatible, adaptador USB si aplica, PuTTY y herramienta de soporte remoto aprobada.',notes:'Ejemplo de ticket ya asignado a un IDC. El alcance exacto debe confirmarse antes de intervenir.',fee:null,travel:250,payStatus:'Por confirmar',checklist:{},evidence:0,closeNote:'',logs:[{title:'Ticket asignado a IDC-001',at:new Date().toLocaleString('es-MX',{dateStyle:'short',timeStyle:'short'}),desc:'Asignación directa de demostración por RRHH.'}]},
- {id:'FCG-DEMO-0103',siteId:'DEMO-SITE-003',project:'Migración de conectividad',client:'Cliente de demostración 03',site:'Sucursal de prueba 03',city:'Zona centro (demo)',address:'Domicilio ficticio para pruebas',contact:'Contacto de prueba 03',phone:'',type:'Migración a fibra',date:demoDate(5),time:'11:00',priority:'Normal',status:'Disponible',assignedTo:null,scope:'Confirmar si la intervención es física, lógica o de apoyo. Verificar equipo terminal, ópticos, circuito, ventana de cambio y pruebas requeridas antes de intervenir.',tools:'Laptop, cable de consola y cable UTP. Confirmar quién suministra fibra, módulos ópticos y herramientas especializadas.',notes:'No iniciar cambios fuera del alcance autorizado. Requiere ventana de cambio y plan de reversa acordado.',fee:null,travel:0,payStatus:'Por confirmar',checklist:{},evidence:0,closeNote:'',logs:[{title:'Ticket publicado por RRHH',at:new Date().toLocaleString('es-MX',{dateStyle:'short',timeStyle:'short'}),desc:'Disponible para revisión de los IDC.'}]},
- {id:'FCG-DEMO-0104',siteId:'DEMO-SITE-004',project:'Monitoreo ambiental y eléctrico',client:'Cliente de demostración 04',site:'Oficina de prueba 04',city:'Zona centro (demo)',address:'Domicilio ficticio para pruebas',contact:'Contacto de prueba 04',phone:'',type:'Monitoreo',date:demoDate(6),time:'12:00',priority:'Baja',status:'En progreso',assignedTo:'IDC-002',supportEngineerId:'APOYO-001',scope:'Revisar concentrador y sensores asociados al monitoreo, validar comunicación con la plataforma y registrar las lecturas de prueba.',tools:'Concentrador, sensores y accesorios del proyecto; laptop, herramientas de montaje y acceso a plataforma, según alcance.',notes:'Ejemplo ilustrativo. El cierre puede requerir inventario, checklist y conformidad del responsable.',fee:null,travel:0,payStatus:'Por confirmar',checklist:{},evidence:0,closeNote:'',logs:[{title:'Trabajo iniciado',at:new Date().toLocaleString('es-MX',{dateStyle:'short',timeStyle:'short'}),desc:'Ejemplo de un servicio en ejecución a cargo de IDC-002.'}]}
+
+/* FieldConnect Group · cliente web Supabase
+ * No se incluye ninguna clave secreta. La seguridad vive en Auth + RLS + RPC.
+ */
+const $ = (id) => document.getElementById(id);
+const ROLE_LABELS = { HR: 'Personal administrativo', SUPPORT: 'Ingeniería de apoyo', IDC: 'Ingeniero de campo (IDC)' };
+const ROLE_TITLES = { HR: 'Personal administrativo', SUPPORT: 'Ingeniería de apoyo remoto', IDC: 'Ingeniero de campo' };
+const STATUSES = ['Disponible', 'Asignado', 'En progreso', 'En espera', 'Completado', 'Cancelado'];
+const SERVICE_TYPES = ['Activación de enlace', 'Instalación de APS', 'Migración a fibra', 'Monitoreo', 'Levantamiento técnico', 'Soporte técnico'];
+const CHECKLIST_ITEMS = [
+  'Confirmar contacto, acceso, fecha y hora',
+  'Validar herramientas y materiales',
+  'Revisar condiciones del sitio y alcance',
+  'Ejecutar pruebas autorizadas',
+  'Registrar evidencias y reporte',
+  'Confirmar resultado con responsable'
 ];
-let tickets=loadTickets();let currentUser=null;let selectedTicketId=null;let toastTimer=null;
-const $=id=>document.getElementById(id);
-function loadTickets(){try{const raw=localStorage.getItem(DB_KEY);if(raw){const parsed=JSON.parse(raw);if(Array.isArray(parsed))return parsed}}catch(e){}return structuredClone(seed)}
-function saveDB(){try{localStorage.setItem(DB_KEY,JSON.stringify(tickets))}catch(e){toast('No se pudo guardar en el navegador. Revisa el almacenamiento local.')}renderAll()}
-function safe(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-function fmtDate(s){if(!s)return 'Por confirmar';const p=s.split('-');return p.length===3?`${p[2]}/${p[1]}/${p[0]}`:s}
-function money(n){return n===null||n===undefined||n===''?'Por confirmar':new Intl.NumberFormat('es-MX',{style:'currency',currency:'MXN',maximumFractionDigits:2}).format(Number(n)||0)}
-function statusClass(s){return ({'Disponible':'p-available','Asignado':'p-assigned','En progreso':'p-progress','En espera':'p-wait','Completado':'p-done','Cancelado':'p-cancel'})[s]||'p-cancel'}
-function statusPill(s){return `<span class="pill ${statusClass(s)}">${safe(s)}</span>`}
-function log(t,title,desc){t.logs=t.logs||[];t.logs.unshift({title,desc,at:new Date().toLocaleString('es-MX',{dateStyle:'short',timeStyle:'short'})})}
-function toast(msg){const el=$('toast');el.textContent=msg;el.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),3200)}
-function pickRole(role){$('pickHR').classList.toggle('selected',role==='HR');$('pickIDC').classList.toggle('selected',role==='IDC');$('pickSupport').classList.toggle('selected',role==='SUPPORT');const needsPicker=role==='IDC'||role==='SUPPORT';$('idcPickerField').classList.toggle('hidden',!needsPicker);if(role==='SUPPORT'&&$('idcPicker').value.startsWith('IDC-'))$('idcPicker').value='APOYO-001';if(role==='IDC'&&$('idcPicker').value.startsWith('APOYO-'))$('idcPicker').value='IDC-001';$('loginIdLabel').textContent=role==='HR'?'Usuario de personal administrativo':role==='SUPPORT'?'Identificador de ingeniería de apoyo':'Identificador IDC';$('loginId').value=role==='HR'?'admin':$('idcPicker').value;$('loginPass').value='demo123';$('loginError').classList.add('hidden');$('loginForm').dataset.role=role} 
-$('pickHR').addEventListener('click',()=>pickRole('HR'));$('pickIDC').addEventListener('click',()=>pickRole('IDC'));$('pickSupport').addEventListener('click',()=>pickRole('SUPPORT'));
-$('idcPicker').addEventListener('change',()=>{$('loginId').value=$('idcPicker').value});$('loginForm').dataset.role='HR';
-$('loginForm').addEventListener('submit',e=>{e.preventDefault();const role=$('loginForm').dataset.role||'HR';let user;if(role==='HR'){const id=$('loginId').value.trim().toLowerCase();if(!['admin','personal administrativo','rrhh','recursos humanos','hr'].includes(id)){return loginError('Usa el usuario de demostración “admin”.')}user={id:'ADMIN',name:'Personal administrativo',role:'HR',title:'Personal administrativo'}}else{const id=$('idcPicker').value;if(!PEOPLE[id]||PEOPLE[id].role!==role)return loginError('Selecciona un perfil válido para este tipo de acceso.');user={...PEOPLE[id]}}currentUser=user;try{sessionStorage.setItem(SESSION_KEY,JSON.stringify(user))}catch(e){}$('loginScreen').classList.add('hidden');$('appShell').classList.remove('hidden');applyRole();renderAll();goPage(role==='HR'?'overview':'available');});
-function loginError(msg){$('loginError').textContent=msg;$('loginError').classList.remove('hidden')}
-function applyRole(){const hr=currentUser.role==='HR',support=currentUser.role==='SUPPORT',idc=currentUser.role==='IDC';$('navHR').classList.toggle('hidden',!hr);$('navIDC').classList.toggle('hidden',hr);$('roleBadge').textContent=hr?'Personal administrativo':support?'Ingeniería de apoyo':'IDC';$('userName').textContent=currentUser.name;$('userRole').textContent=hr?'Personal administrativo':currentUser.id+' · '+(support?'Ingeniería de apoyo remoto':'Ingeniero de campo');$('userAvatar').textContent=hr?'PA':support?'AP':currentUser.id.split('-')[1];$('sideRoleTitle').textContent=hr?'Administración de servicios':support?'Coordinación logística remota':'Bandeja del ingeniero de campo';$('sideRoleCopy').textContent=hr?'Publica tickets y supervisa su ciclo completo.':support?'Toma los tickets publicados y prepara la logística antes de habilitarlos para IDC.':'Consulta y toma tickets que ya tienen apoyo logístico asignado.';const availableNav=$('navIDC').querySelector('[data-page="available"]');const mineNav=$('navIDC').querySelector('[data-page="myTickets"]');availableNav.textContent=support?'Tickets por coordinar':'Servicios disponibles';mineNav.textContent=support?'Mi logística':'Mis servicios'}
-$('logoutBtn').addEventListener('click',()=>{currentUser=null;try{sessionStorage.removeItem(SESSION_KEY)}catch(e){}$('appShell').classList.add('hidden');$('loginScreen').classList.remove('hidden');pickRole('HR');$('loginId').value='rrhh'});
-function pageMeta(k){return ({overview:['Resumen','Centro de operaciones'],tickets:['Tickets','Todos los tickets'],new:['Crear ticket','Alta de servicio'],available:['Servicios disponibles','Bandeja de servicios'],myTickets:['Mis servicios','Agenda personal']})[k]}
-function goPage(k){if(!pageMeta(k))return;if(currentUser?.role==='HR'&&['available','myTickets'].includes(k))return;if(['IDC','SUPPORT'].includes(currentUser?.role)&&!['available','myTickets'].includes(k))return;document.querySelectorAll('.page').forEach(el=>el.classList.remove('active'));$('page-'+k).classList.add('active');document.querySelectorAll('[data-page]').forEach(b=>b.classList.toggle('active',b.dataset.page===k));$('crumb').textContent=pageMeta(k)[0];$('topTitle').textContent=pageMeta(k)[1];window.scrollTo({top:0,behavior:'smooth'});if(k==='new'){$('fDate').value=$('fDate').value||todayLocalISO()}}
-function matches(t,q){q=(q||'').toLowerCase().trim();return !q||[t.id,t.siteId,t.client,t.site,t.city,t.type,t.assignedTo,t.project].some(v=>String(v||'').toLowerCase().includes(q))}
-function assignedLabel(t){const sup=t.supportEngineerId?`Apoyo: ${PEOPLE[t.supportEngineerId]?.name||t.supportEngineerId}`:'Pendiente de ingeniería de apoyo';const idc=t.assignedTo?`${t.assignedTo}${PEOPLE[t.assignedTo]?' · '+PEOPLE[t.assignedTo].name:''}`:'IDC pendiente';return `${sup} · ${idc}`}
-function renderTableRow(t){return `<tr data-id="${safe(t.id)}"><td><div class="ticket-id">${safe(t.id)}</div><div class="td-sub">SITE ID: ${safe(t.siteId||'—')}</div></td><td><div class="td-title">${safe(t.client)}</div><div class="td-sub">${safe(t.site)} · ${safe(t.city)}</div></td><td><div class="td-title">${safe(t.type)}</div><div class="td-sub">${safe(t.priority||'Normal')} prioridad</div></td><td>${fmtDate(t.date)}<div class="td-sub">${safe(t.time||'Hora por confirmar')}</div></td><td>${safe(assignedLabel(t))}</td><td>${statusPill(t.status)}</td><td><button class="btn btn-secondary btn-sm" data-detail="${safe(t.id)}">Abrir</button></td></tr>`}
-function renderHR(){const assigned=tickets.filter(t=>t.assignedTo).length;const available=tickets.filter(t=>t.status==='Disponible'&&!t.assignedTo).length;const progress=tickets.filter(t=>t.status==='En progreso').length;const done=tickets.filter(t=>t.status==='Completado').length;$('hrStats').innerHTML=[['Tickets totales',tickets.length,'Servicios registrados'],['Disponibles',available,'Esperan a que un IDC los tome'],['En ejecución',progress,'Trabajo iniciado'],['Completados',done,'Pendientes de revisión si aplica']].map((x,i)=>`<article class="stat"><div class="stat-label">${x[0]}<span>${['▤','◉','⚙','✓'][i]}</span></div><div class="stat-number">${x[1]}</div><div class="stat-foot">${x[2]}</div></article>`).join('');const q=$('hrSearch').value,s=$('hrStatusFilter').value;const arr=tickets.filter(t=>matches(t,q)&&(s==='all'||t.status===s)).slice().sort((a,b)=>(b.id||'').localeCompare(a.id||''));$('hrRows').innerHTML=arr.slice(0,9).map(renderTableRow).join('');$('hrEmpty').classList.toggle('hidden',arr.length>0);const allQ=$('allSearch').value,allS=$('allStatus').value,allT=$('allType').value;const all=tickets.filter(t=>matches(t,allQ)&&(allS==='all'||t.status===allS)&&(allT==='all'||t.type===allT)).slice().sort((a,b)=>(b.id||'').localeCompare(a.id||''));$('allRows').innerHTML=all.map(renderTableRow).join('');$('allEmpty').classList.toggle('hidden',all.length>0);$('activityHR').innerHTML=tickets.flatMap(t=>(t.logs||[]).map(l=>({...l,ticket:t.id}))).slice(0,5).map(l=>`<div class="activity-row"><div class="activity-icon">↻</div><div><strong>${safe(l.title)} · ${safe(l.ticket)}</strong><p>${safe(l.desc||'')}</p><p class="muted">${safe(l.at||'')}</p></div></div>`).join('')||'<div class="empty">Aún no hay movimientos.</div>'}
-function iconFor(type){return ({'Instalación de APS':'⌁','Activación de enlace':'⇄','Migración a fibra':'◈','Monitoreo':'⌁','Levantamiento técnico':'⌖','Soporte técnico':'⚙'})[type]||'▤'}
-function serviceCard(t,mode){let owner=mode==='mine'||mode==='supportMine';let action='';if(mode==='supportAvailable')action=`<button class="btn btn-primary" data-support-claim="${safe(t.id)}">Tomar logística</button>`;else if(mode==='supportMine')action=`<button class="btn btn-secondary" data-detail="${safe(t.id)}">Ver ticket y logística</button>`;else if(!owner)action=`<button class="btn btn-primary" data-claim="${safe(t.id)}">Tomar servicio</button>`;else{if(t.status==='Asignado')action+=`<button class="btn btn-primary" data-status="En progreso" data-ticket="${safe(t.id)}">Iniciar servicio</button>`;else if(t.status==='En progreso')action+=`<button class="btn btn-green" data-status="Completado" data-ticket="${safe(t.id)}">Marcar terminado</button>`;if(t.status!=='Completado'&&t.status!=='Cancelado')action+=`<button class="btn btn-secondary" data-detail="${safe(t.id)}">Actualizar / detalle</button>`;else action+=`<button class="btn btn-secondary" data-detail="${safe(t.id)}">Ver reporte</button>`}
-return `<article class="service-card"><div class="card-top"><div style="display:flex;gap:11px;min-width:0"><div class="type-icon">${iconFor(t.type)}</div><div><h3>${safe(t.type)}</h3><div class="client">${safe(t.client)} · ${safe(t.id)}</div></div></div>${statusPill(t.status)}</div><div><div class="td-title">${safe(t.site)}</div><div class="td-sub">${safe(t.city)}</div></div><div class="meta-grid"><div><div class="meta-label">Fecha y hora</div><div class="meta-value">${fmtDate(t.date)} · ${safe(t.time||'Por confirmar')}</div></div><div><div class="meta-label">Prioridad</div><div class="meta-value">${safe(t.priority||'Normal')}</div></div><div><div class="meta-label">Viáticos</div><div class="meta-value">${money(t.travel||0)}</div></div><div><div class="meta-label">Pago de servicio</div><div class="meta-value">${money(t.fee)}</div></div></div><div class="card-desc">${safe((t.scope||'Sin alcance registrado').length>200?(t.scope||'').slice(0,200)+'…':t.scope||'Sin alcance registrado')}</div><div class="tools-chip"><strong>Herramientas requeridas:</strong><br>${safe(t.tools||'Por confirmar con coordinación')}</div><div class="card-actions"><button class="btn btn-secondary" data-detail="${safe(t.id)}">Ver ticket completo</button>${action}</div></article>`}
-function renderIDC(){const me=currentUser.id;const avail=tickets.filter(t=>t.status==='Disponible'&&!t.assignedTo);const q=$('availableSearch').value,ty=$('availableType').value;const shown=avail.filter(t=>matches(t,q)&&(ty==='all'||t.type===ty));$('availableCards').innerHTML=shown.map(t=>serviceCard(t,'available')).join('');$('availableCount').textContent=`${avail.length} disponibles`;$('availableEmpty').classList.toggle('hidden',shown.length>0);const own=tickets.filter(t=>t.assignedTo===me);const q2=$('mySearch').value,s2=$('myStatus').value;const mine=own.filter(t=>matches(t,q2)&&(s2==='all'||t.status===s2)).slice().sort((a,b)=>(b.id||'').localeCompare(a.id||''));$('myCards').innerHTML=mine.map(t=>serviceCard(t,'mine')).join('');$('myCount').textContent=`${own.length} servicios`;$('myEmpty').classList.toggle('hidden',mine.length>0)}
-function renderAll(){if(!currentUser)return;if(currentUser.role==='HR')renderHR();else renderIDC()}
-function openDetail(id){const t=tickets.find(x=>x.id===id);if(!t)return;if(currentUser.role==='IDC'&&t.assignedTo&&t.assignedTo!==currentUser.id){toast('Este ticket está asignado a otro IDC.');return}if(currentUser.role==='IDC'&&t.status==='Disponible'&&!t.assignedTo){/* IDC may preview available tickets but must explicitly take them. */}
-selectedTicketId=id;$('detailTicketId').textContent=t.id;$('detailTitle').textContent=t.type;$('detailSub').textContent=`${t.client} · ${t.site} · ${t.city}`;const hr=currentUser.role==='HR';let body=`<div class="detail-grid"><div class="detail-box"><div class="detail-label">Cliente / proyecto</div><div class="detail-value">${safe(t.client)}\n${safe(t.project||'Sin proyecto')}\nSITE ID: ${safe(t.siteId||'—')}</div></div><div class="detail-box"><div class="detail-label">Estado / asignación</div><div class="detail-value">${statusPill(t.status)}<div style="margin-top:8px">${safe(assignedLabel(t))}</div></div></div><div class="detail-box"><div class="detail-label">Sitio y cita</div><div class="detail-value">${safe(t.site)}\n${safe(t.city)}\n${safe(t.address||'Domicilio por confirmar')}\n${fmtDate(t.date)} · ${safe(t.time||'Por confirmar')}</div></div><div class="detail-box"><div class="detail-label">Contacto</div><div class="detail-value">${safe(t.contact||'Por confirmar')}\n${safe(t.phone||'Teléfono no registrado')}</div></div><div class="detail-box wide"><div class="detail-label">Alcance técnico</div><div class="detail-value">${safe(t.scope||'Sin alcance registrado')}</div></div><div class="detail-box wide"><div class="detail-label">Herramientas y materiales</div><div class="detail-value">${safe(t.tools||'Por confirmar')}</div></div><div class="detail-box"><div class="detail-label">Pago por servicio</div><div class="detail-value">${money(t.fee)}</div></div><div class="detail-box"><div class="detail-label">Viáticos acordados</div><div class="detail-value">${money(t.travel||0)} · ${safe(t.payStatus||'Por confirmar')}</div></div><div class="detail-box wide"><div class="detail-label">Notas y condiciones</div><div class="detail-value">${safe(t.notes||'Sin notas')}</div></div></div>`;
-if(hr){body+=`<div class="form-section" style="margin-top:20px">Administrar ticket</div><div class="form-grid"><div class="field"><label for="dAssign">Responsable IDC</label><select id="dAssign"><option value="Disponible" ${!t.assignedTo?'selected':''}>Disponible para todos los IDC</option>${Object.values(PEOPLE).map(p=>`<option value="${p.id}" ${t.assignedTo===p.id?'selected':''}>${p.id} · ${safe(p.name)}</option>`).join('')}</select></div><div class="field"><label for="dStatus">Estado</label><select id="dStatus">${['Disponible','Asignado','En progreso','En espera','Completado','Cancelado'].map(s=>`<option ${t.status===s?'selected':''}>${s}</option>`).join('')}</select></div><div class="field"><label for="dFee">Pago por servicio (MXN)</label><input id="dFee" type="number" min="0" step=".01" value="${t.fee??''}" placeholder="Por confirmar"></div><div class="field"><label for="dTravel">Viáticos (MXN)</label><input id="dTravel" type="number" min="0" step=".01" value="${Number(t.travel)||0}"></div><div class="field"><label for="dPayStatus">Estado de pago</label><select id="dPayStatus">${['Por confirmar','Acordado','Viáticos depositados','Pagado'].map(s=>`<option ${t.payStatus===s?'selected':''}>${s}</option>`).join('')}</select></div><div class="field"><label for="dCloseNote">Notas de RRHH / cierre</label><textarea id="dCloseNote">${safe(t.closeNote||'')}</textarea></div></div>`;$('detailActions').innerHTML=`<button class="btn btn-secondary" id="detailExport">Exportar ficha</button><button class="btn btn-primary" id="saveAdminDetail">Guardar cambios</button>`;}
-else{let checks=['Confirmar contacto, acceso, fecha y hora','Validar herramientas y materiales','Revisar condiciones del sitio y alcance','Ejecutar pruebas autorizadas','Registrar evidencias y reporte','Confirmar resultado con responsable'];body+=`<div class="form-section" style="margin-top:20px">Checklist de campo</div><div class="checklist">${checks.map((c,i)=>`<label class="checkrow"><input type="checkbox" data-check="${i}" ${(t.checklist||{})[i]?'checked':''} ${['Completado','Cancelado'].includes(t.status)?'disabled':''}>${c}</label>`).join('')}</div><div class="field" style="margin-top:16px"><label for="dIdcNote">Nota de visita / resultado</label><textarea id="dIdcNote" placeholder="Hora de llegada, pruebas, incidencias, pendiente o resultado final…">${safe(t.closeNote||'')}</textarea></div><div class="field"><label for="dEvidence">Evidencias registradas (cantidad)</label><input id="dEvidence" type="number" min="0" step="1" value="${Number(t.evidence)||0}"></div>`;let acts='';if(t.status==='Disponible'&&!t.assignedTo)acts+=`<button class="btn btn-primary" id="claimFromDetail">Tomar servicio</button>`;if(t.assignedTo===currentUser.id&&t.status==='Asignado')acts+=`<button class="btn btn-primary" id="startFromDetail">Iniciar servicio</button>`;if(t.assignedTo===currentUser.id&&['Asignado','En progreso','En espera'].includes(t.status))acts+=`<button class="btn btn-green" id="saveIdcDetail">Guardar avance</button>`;else if(t.assignedTo===currentUser.id)acts+=`<button class="btn btn-secondary" id="saveIdcDetail">Guardar nota</button>`;$('detailActions').innerHTML=acts||'<span class="small muted">Solo lectura</span>';}
-$('detailContent').innerHTML=body;$('detailFoot').textContent=hr?'RRHH puede ajustar la asignación y el estado.':'Registra avances reales y no marques el cierre sin completar los requisitos del servicio.';$('detailOverlay').classList.add('open');bindDetailActions(t,hr)}
-function bindDetailActions(t,hr){if(hr){$('saveAdminDetail').addEventListener('click',()=>{const a=$('dAssign').value;const ns=$('dStatus').value;if(a==='Disponible'){if(!['Disponible','Cancelado'].includes(ns)){toast('Asigna primero un IDC para usar ese estado.');return}t.assignedTo=null;t.status=ns}else{t.assignedTo=a;t.status=ns==='Disponible'?'Asignado':ns;}const feeRaw=$('dFee').value,travelRaw=$('dTravel').value;if((feeRaw!==''&&(!Number.isFinite(Number(feeRaw))||Number(feeRaw)<0))||(travelRaw!==''&&(!Number.isFinite(Number(travelRaw))||Number(travelRaw)<0))){toast('Revisa los importes de pago y viáticos.');return}t.fee=feeRaw===''?null:Number(feeRaw);t.travel=travelRaw===''?0:Number(travelRaw);t.payStatus=$('dPayStatus').value;t.closeNote=$('dCloseNote').value.trim();log(t,'Ticket actualizado por RRHH',`Estado: ${t.status}. Responsable: ${assignedLabel(t)}.`);saveDB();closeDetail();toast('Ticket actualizado.')});$('detailExport').addEventListener('click',()=>exportOne(t));}
-else{const claim=$('claimFromDetail');if(claim)claim.addEventListener('click',()=>claimTicket(t.id));const save=$('saveIdcDetail');if(save)save.addEventListener('click',()=>{if(t.assignedTo!==currentUser.id){toast('Primero toma o confirma este servicio.');return}document.querySelectorAll('[data-check]').forEach(ch=>t.checklist[ch.dataset.check]=ch.checked);t.closeNote=$('dIdcNote').value.trim();t.evidence=Math.max(0,Number($('dEvidence').value)||0);log(t,'Avance actualizado por '+currentUser.id,t.closeNote||'Checklist y datos de visita actualizados.');saveDB();closeDetail();toast('Avance guardado.')});const start=$('startFromDetail');if(start)start.addEventListener('click',()=>setStatus(t.id,'En progreso'));}}
-function closeDetail(){$('detailOverlay').classList.remove('open');selectedTicketId=null}
-function claimTicket(id){const t=tickets.find(x=>x.id===id);if(!t||currentUser.role!=='IDC')return;if(t.status!=='Disponible'||t.assignedTo){toast('Este servicio ya no está disponible. Actualiza la bandeja.');renderAll();closeDetail();return}t.assignedTo=currentUser.id;t.status='Asignado';log(t,'Servicio tomado por '+currentUser.id,`${currentUser.name} aceptó el servicio con apoyo logístico de ${PEOPLE[t.supportEngineerId]?.name||t.supportEngineerId}.`);saveDB();closeDetail();goPage('myTickets');toast('Servicio asignado a tu perfil. Revisa los datos antes de acudir.')}
-function setStatus(id,status){const t=tickets.find(x=>x.id===id);if(!t)return;if(currentUser.role==='IDC'&&t.assignedTo!==currentUser.id){toast('Solo puedes actualizar tus propios servicios.');return}if(status==='Completado'&&currentUser.role==='IDC'){const checks=t.checklist||{};if(Object.values(checks).filter(Boolean).length<6){if(!confirm('El checklist aún no está completo. ¿Confirmas que el servicio quedó terminado según el procedimiento real?'))return}}const prior=t.status;t.status=status;if(status==='Completado')t.completedAt=new Date().toISOString();log(t,'Estado actualizado',`${prior} → ${status} por ${currentUser.id}.`);saveDB();if($('detailOverlay').classList.contains('open'))closeDetail();toast('Estado del servicio actualizado.')}
-function createTicket(e){e.preventDefault();if(currentUser.role!=='HR')return;const val=id=>$(id).value.trim();const assign=val('fAssignment');const date=val('fDate');const id='FCG-'+new Date().getFullYear()+'-'+String(Date.now()).slice(-6);const t={id,siteId:val('fSiteId'),project:val('fProject'),client:val('fClient'),site:val('fSite'),city:val('fCity'),address:val('fAddress'),contact:val('fContact'),phone:val('fPhone'),type:val('fType'),date,time:val('fTime'),priority:val('fPriority'),status:'Disponible',assignedTo:null,supportEngineerId:null,scope:val('fScope'),tools:val('fTools'),notes:val('fNotes'),fee:val('fFee')===''?null:Number(val('fFee')),travel:Number(val('fTravel'))||0,payStatus:val('fPayStatus'),checklist:{},evidence:0,closeNote:'',logs:[]};log(t,'Ticket publicado por Personal administrativo','Disponible para que ingeniería de apoyo tome la coordinación logística.');tickets.unshift(t);saveDB();$('ticketForm').reset();$('fTime').value='09:00';$('fTravel').value='0';toast(`Se publicó ${id} para ingeniería de apoyo.`);goPage('tickets')}
-function exportCSV(name,rows){const content='\ufeff'+rows.map(r=>r.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(',')).join('\r\n');const blob=new Blob([content],{type:'text/csv;charset=utf-8'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;a.click();URL.revokeObjectURL(url);toast('CSV exportado.')}
-function exportTickets(){exportCSV('fielddesk_tickets.csv',[['Ticket','SITE ID','Cliente','Sitio','Ciudad','Tipo','Fecha','Hora','Estado','IDC asignado','Alcance','Herramientas','Pago MXN','Viáticos MXN','Estado pago','Nota cierre'],...tickets.map(t=>[t.id,t.siteId,t.client,t.site,t.city,t.type,t.date,t.time,t.status,t.assignedTo,t.scope,t.tools,t.fee,t.travel,t.payStatus,t.closeNote])])}
-function exportOne(t){exportCSV(`${t.id}_reporte.csv`,[['Campo','Valor'],['Ticket',t.id],['Cliente',t.client],['Sitio',t.site],['Ciudad',t.city],['SITE ID',t.siteId],['Servicio',t.type],['Fecha',t.date],['Hora',t.time],['Estado',t.status],['IDC',t.assignedTo],['Alcance',t.scope],['Herramientas',t.tools],['Pago',t.fee],['Viáticos',t.travel],['Estado de pago',t.payStatus],['Checklist',JSON.stringify(t.checklist||{})],['Evidencias',t.evidence],['Nota de cierre',t.closeNote]])}
-function renderAll(){if(!currentUser)return;if(currentUser.role==='HR')renderHR();else renderIDC()}
-document.addEventListener('click',e=>{const pg=e.target.closest('[data-page]');if(pg){goPage(pg.dataset.page);return}if(e.target.closest('[data-new]')){goPage('new');return}const d=e.target.closest('[data-detail]');if(d){openDetail(d.dataset.detail);return}const cl=e.target.closest('[data-claim]');if(cl){claimTicket(cl.dataset.claim);return}const st=e.target.closest('[data-status]');if(st){setStatus(st.dataset.ticket,st.dataset.status);return}const row=e.target.closest('tr[data-id]');if(row&&!e.target.closest('button')&&currentUser?.role==='HR')openDetail(row.dataset.id);const close=e.target.closest('[data-close]');if(close)closeDetail()});
-$('ticketForm').addEventListener('submit',createTicket);$('resetFormBtn').addEventListener('click',()=>{ $('ticketForm').reset(); $('fDate').value=todayLocalISO(); $('fTime').value='09:00'; $('fTravel').value='0'; });$('hrSearch').addEventListener('input',renderHR);$('hrStatusFilter').addEventListener('change',renderHR);$('allSearch').addEventListener('input',renderHR);$('allStatus').addEventListener('change',renderHR);$('allType').addEventListener('change',renderHR);$('availableSearch').addEventListener('input',renderIDC);$('availableType').addEventListener('change',renderIDC);$('mySearch').addEventListener('input',renderIDC);$('myStatus').addEventListener('change',renderIDC);$('exportBtn').addEventListener('click',exportTickets);$('detailOverlay').addEventListener('click',e=>{if(e.target===$('detailOverlay'))closeDetail()});document.addEventListener('keydown',e=>{if(e.key==='Escape')closeDetail()});
+const ALLOWED_EVIDENCE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+const MAX_EVIDENCE_SIZE = 10 * 1024 * 1024;
 
-// ===================== MEJORAS FUNCIONALES V2 =====================
-function todayLocalISO(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
-const SERVICE_TEMPLATES={
- 'Activación de enlace':{scope:'Verificar el equipo y ejecutar la activación autorizada. Confirmar los parámetros entregados por coordinación, probar conectividad según el procedimiento del cliente y documentar resultados, incidencias y estado final.',tools:'Laptop, cable UTP, cable de consola compatible, adaptador USB/serial si aplica y herramienta de acceso remoto autorizada. Confirmar credenciales, configuración aprobada y contacto de soporte.'},
- 'Instalación de APS':{scope:'Confirmar la ubicación autorizada, realizar el montaje y conexión del punto de acceso de acuerdo con las especificaciones del proyecto, validar conectividad y documentar ubicación, serie y resultado de las pruebas.',tools:'Laptop, cable UTP, patch cords, desarmadores, tester, etiquetadora, escalera adecuada y materiales de fijación especificados. Confirmar quién proporciona el AP y el EPP requerido.'},
- 'Migración a fibra':{scope:'Confirmar alcance físico o lógico, ventana de cambio, equipo terminal, circuito y plan de reversa. Ejecutar únicamente cambios autorizados y validar conectividad antes de cerrar.',tools:'Laptop, cable de consola y UTP. Confirmar previamente disponibilidad y compatibilidad de fibra, patch cords ópticos, transceptores y herramientas especializadas.'},
- 'Monitoreo':{scope:'Instalar o revisar el concentrador y sensores incluidos en el alcance, comprobar alimentación y comunicación con la plataforma, verificar lecturas de prueba y documentar inventario e incidencias.',tools:'Laptop, concentrador y sensores del proyecto, fuentes y accesorios de montaje, herramientas básicas y acceso autorizado a la plataforma. Confirmar materiales y permisos del sitio.'},
- 'Levantamiento técnico':{scope:'Inspeccionar el sitio sin efectuar cambios no autorizados. Registrar condiciones físicas, energía, cableado, espacios, rutas y restricciones. Entregar evidencias y lista de materiales o requerimientos para la siguiente etapa.',tools:'Laptop o teléfono para notas y fotografías autorizadas, formato de levantamiento, cinta o medidor y herramientas de inspección que solicite el cliente.'},
- 'Soporte técnico':{scope:'Diagnosticar la incidencia reportada, registrar síntomas y pruebas realizadas, aplicar únicamente acciones autorizadas y documentar la solución o los pendientes para escalamiento.',tools:'Laptop, cable UTP, cable de consola compatible, adaptadores necesarios y herramientas de diagnóstico autorizadas. Confirmar acceso, permisos y contacto de escalamiento.'}
-};
-function applyServiceTemplate(){const type=$('fType')?.value;const tpl=SERVICE_TEMPLATES[type];if(!tpl){toast('Selecciona primero el tipo de servicio.');return}const scope=$('fScope').value.trim(),tools=$('fTools').value.trim();if((scope||tools)&&!confirm('La plantilla reemplazará el alcance y las herramientas actuales. ¿Deseas continuar?'))return;$('fScope').value=tpl.scope;$('fTools').value=tpl.tools;toast('Plantilla cargada. Revisa y adapta los detalles al ticket real.');}
-$('loadTemplateBtn')?.addEventListener('click',applyServiceTemplate);
-$('fType')?.addEventListener('change',()=>{const b=$('loadTemplateBtn');if(b)b.textContent=$('fType').value?'Cargar plantilla: '+$('fType').value:'Cargar plantilla de alcance y herramientas'});
+let supabaseClient = null;
+let currentUser = null;
+let selectedRole = 'HR';
+let tickets = [];
+let profileById = {};
+let profileByCode = {};
+let selectedTicketId = null;
+let realtimeChannel = null;
+let toastTimer = null;
 
-// Busca también en domicilio, contacto, alcance y herramientas.
-function matches(t,q){q=(q||'').toLowerCase().trim();return !q||[t.id,t.siteId,t.client,t.site,t.city,t.address,t.contact,t.type,t.assignedTo,t.project,t.scope,t.tools,t.notes].some(v=>String(v||'').toLowerCase().includes(q))}
-function iconFor(type){const paths={
- 'Instalación de APS':'<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 9h8M8 13h8M8 17h5"/>',
- 'Activación de enlace':'<circle cx="5" cy="12" r="2"/><circle cx="19" cy="6" r="2"/><circle cx="19" cy="18" r="2"/><path d="M7 12h5l5-6M12 12l5 6"/>',
- 'Migración a fibra':'<path d="M4 8h5l2 4h9M4 16h5l2-4"/><circle cx="20" cy="12" r="2"/>',
- 'Monitoreo':'<path d="M3 12h4l2-6 4 12 2-6h6"/>',
- 'Levantamiento técnico':'<path d="M4 20V5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v15M8 8h8M8 12h8M8 16h4"/>',
- 'Soporte técnico':'<path d="M12 3a7 7 0 0 0-7 7v4a3 3 0 0 0 3 3h1v-6H8a3 3 0 0 0-3 3M12 3a7 7 0 0 1 7 7v4a3 3 0 0 1-3 3h-1v-6h1a3 3 0 0 1 3 3M9 20h6"/>'};return `<svg aria-hidden="true" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${paths[type]||'<path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5"/>'}</svg>`}
-function renderIDC(){const me=currentUser.id;const avail=tickets.filter(t=>t.status==='Disponible'&&!t.assignedTo&&t.supportEngineerId).slice().sort((a,b)=>(a.date||'').localeCompare(b.date||'')||(a.time||'').localeCompare(b.time||''));const q=$('availableSearch').value,ty=$('availableType').value;const shown=avail.filter(t=>matches(t,q)&&(ty==='all'||t.type===ty));$('availableCards').innerHTML=shown.map(t=>serviceCard(t,'available')).join('');$('availableCount').textContent=`${avail.length} listos con apoyo logístico`;$('availableEmpty').classList.toggle('hidden',shown.length>0);if(!$('availableEmpty').classList.contains('hidden'))$('availableEmpty').innerHTML='<strong>No hay servicios listos para tomar</strong>Primero un ingeniero de apoyo debe tomar el ticket y confirmar la logística remota.';const own=tickets.filter(t=>t.assignedTo===me);const q2=$('mySearch').value,s2=$('myStatus').value;const mine=own.filter(t=>matches(t,q2)&&(s2==='all'||t.status===s2)).slice().sort((a,b)=>(a.date||'').localeCompare(b.date||''));$('myCards').innerHTML=mine.map(t=>serviceCard(t,'mine')).join('');$('myCount').textContent=`${own.length} servicios`;$('myEmpty').classList.toggle('hidden',mine.length>0)}
-function renderSupport(){const me=currentUser.id;const available=tickets.filter(t=>t.status==='Disponible'&&!t.assignedTo&&!t.supportEngineerId);const q=$('availableSearch').value,ty=$('availableType').value;const shown=available.filter(t=>matches(t,q)&&(ty==='all'||t.type===ty));$('availableCards').innerHTML=shown.map(t=>serviceCard(t,'supportAvailable')).join('');$('availableCount').textContent=`${available.length} por coordinar`;$('availableEmpty').classList.toggle('hidden',shown.length>0);if(!$('availableEmpty').classList.contains('hidden'))$('availableEmpty').innerHTML='<strong>No hay tickets pendientes de logística</strong>Cuando el personal administrativo publique un ticket, aparecerá aquí.';const own=tickets.filter(t=>t.supportEngineerId===me);const q2=$('mySearch').value,s2=$('myStatus').value;const mine=own.filter(t=>matches(t,q2)&&(s2==='all'||t.status===s2)).sort((a,b)=>(a.date||'').localeCompare(b.date||''));$('myCards').innerHTML=mine.map(t=>serviceCard(t,'supportMine')).join('');$('myCount').textContent=`${own.length} tickets coordinados`;$('myEmpty').classList.toggle('hidden',mine.length>0);if(!$('myEmpty').classList.contains('hidden'))$('myEmpty').innerHTML='<strong>Aún no tienes tickets coordinados</strong>Abre “Tickets por coordinar” y toma un servicio para organizar su logística.'}
-function renderAll(){if(!currentUser)return;if(currentUser.role==='HR')renderHR();else if(currentUser.role==='SUPPORT')renderSupport();else renderIDC()}function normalizeImportedTicket(t){if(!t||typeof t!=='object'||!String(t.id||'').trim())return null;const statuses=['Disponible','Asignado','En progreso','En espera','Completado','Cancelado'];let status=statuses.includes(t.status)?t.status:'Disponible';let assignedTo=Object.prototype.hasOwnProperty.call(PEOPLE,t.assignedTo)?t.assignedTo:null;if(!assignedTo&&['Asignado','En progreso','En espera'].includes(status))status='Disponible';return {...t,id:String(t.id),siteId:String(t.siteId||''),client:String(t.client||''),site:String(t.site||''),city:String(t.city||''),type:String(t.type||'Soporte técnico'),status,assignedTo,scope:String(t.scope||''),tools:String(t.tools||''),notes:String(t.notes||''),checklist:t.checklist&&typeof t.checklist==='object'?t.checklist:{},evidence:Math.max(0,Number(t.evidence)||0),logs:Array.isArray(t.logs)?t.logs:[],travel:Math.max(0,Number(t.travel)||0),fee:t.fee===''||t.fee===null||t.fee===undefined?null:Math.max(0,Number(t.fee)||0)}}
-function exportBackup(){if(currentUser?.role!=='HR')return;const payload={application:'FieldConnect Group',schemaVersion:2,exportedAt:new Date().toISOString(),tickets};const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json;charset=utf-8'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`fieldconnect-respaldo-${todayLocalISO()}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);toast('Respaldo JSON descargado.')}
-async function importBackupFile(e){const file=e.target.files?.[0];e.target.value='';if(!file||currentUser?.role!=='HR')return;try{const parsed=JSON.parse(await file.text());const raw=Array.isArray(parsed)?parsed:parsed.tickets;if(!Array.isArray(raw))throw new Error('El archivo no contiene una lista de tickets válida.');const clean=raw.map(normalizeImportedTicket).filter(Boolean);if(!clean.length)throw new Error('No hay tickets válidos para restaurar.');if(!confirm(`Se encontraron ${clean.length} tickets válidos. Esto reemplazará los tickets almacenados en este navegador. ¿Continuar?`))return;tickets=clean;log(tickets[0],'Respaldo restaurado por RRHH',`Se importó un archivo JSON con ${clean.length} tickets.`);saveDB();toast(`Respaldo restaurado: ${clean.length} tickets.`)}catch(err){toast('No se pudo restaurar el respaldo: '+(err?.message||'archivo no válido'))}}
-$('exportJsonBtn')?.addEventListener('click',exportBackup);$('importJsonBtn')?.addEventListener('click',()=>{if(currentUser?.role==='HR')$('importJsonFile').click()});$('importJsonFile')?.addEventListener('change',importBackupFile);
+function safe(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+}
+function todayLocalISO() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function formatDate(value) {
+  if (!value) return 'Por confirmar';
+  const parts = String(value).split('-');
+  return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : value;
+}
+function formatLogDate(value) {
+  if (!value) return '';
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? String(value) : d.toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' });
+}
+function money(value) {
+  if (value === null || value === undefined || value === '') return 'Por confirmar';
+  return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 2 }).format(Number(value) || 0);
+}
+function toast(message) {
+  const el = $('toast');
+  if (!el) return;
+  el.textContent = message;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 4200);
+}
+function loginError(message) {
+  const el = $('loginError');
+  el.textContent = message;
+  el.classList.remove('hidden');
+}
+function clearLoginError() {
+  $('loginError').textContent = '';
+  $('loginError').classList.add('hidden');
+}
+function statusClass(status) {
+  return ({ Disponible: 'p-available', Asignado: 'p-assigned', 'En progreso': 'p-progress', 'En espera': 'p-wait', Completado: 'p-done', Cancelado: 'p-cancel' })[status] || 'p-cancel';
+}
+function statusPill(status) { return `<span class="pill ${statusClass(status)}">${safe(status)}</span>`; }
+function newLog(title, desc) {
+  return { title, desc, at: new Date().toISOString() };
+}
+function roleName(role) { return ROLE_LABELS[role] || role || 'Personal'; }
+function profileName(profileId) {
+  const profile = profileById[profileId];
+  return profile ? `${profile.employee_code} · ${profile.name}` : 'Personal por confirmar';
+}
+function assignedLabel(ticket) {
+  const support = ticket.supportEngineerUserId ? `Apoyo: ${profileName(ticket.supportEngineerUserId)}` : 'Pendiente de ingeniería de apoyo';
+  const idc = ticket.assignedToUserId ? `IDC: ${profileName(ticket.assignedToUserId)}` : 'IDC pendiente';
+  return `${support} · ${idc}`;
+}
+function mapTicket(row) {
+  return {
+    dbId: row.id,
+    id: row.ticket_code,
+    siteId: row.site_id || '',
+    project: row.project || '',
+    client: row.client || '',
+    site: row.site || '',
+    city: row.city || '',
+    address: row.address || '',
+    contact: row.contact || '',
+    phone: row.phone || '',
+    type: row.service_type,
+    date: row.service_date,
+    time: String(row.service_time || '').slice(0, 5),
+    priority: row.priority || 'Normal',
+    status: row.status,
+    assignedToUserId: row.assigned_to || null,
+    assignedTo: row.assigned_to ? (profileById[row.assigned_to]?.employee_code || row.assigned_to) : null,
+    supportEngineerUserId: row.support_engineer_id || null,
+    supportEngineerId: row.support_engineer_id ? (profileById[row.support_engineer_id]?.employee_code || row.support_engineer_id) : null,
+    scope: row.scope || '',
+    tools: row.tools || '',
+    notes: row.notes || '',
+    fee: row.fee_mxn === null ? null : Number(row.fee_mxn),
+    travel: Number(row.travel_mxn) || 0,
+    payStatus: row.pay_status || 'Por confirmar',
+    checklist: row.checklist || {},
+    evidence: Number(row.evidence_count) || 0,
+    closeNote: row.close_note || '',
+    logs: Array.isArray(row.logs) ? row.logs : [],
+    createdBy: row.created_by,
+    createdAt: row.created_at,
+    completedAt: row.completed_at
+  };
+}
+function ticketByCode(code) { return tickets.find((ticket) => ticket.id === code || ticket.dbId === code); }
+function matches(ticket, query) {
+  const q = String(query || '').toLowerCase().trim();
+  return !q || [ticket.id, ticket.siteId, ticket.client, ticket.site, ticket.city, ticket.address, ticket.contact,
+    ticket.type, ticket.assignedTo, ticket.supportEngineerId, ticket.project, ticket.scope, ticket.tools, ticket.notes]
+    .some((value) => String(value || '').toLowerCase().includes(q));
+}
+function applyRoleUI() {
+  const role = currentUser.role;
+  const isHR = role === 'HR';
+  const isSupport = role === 'SUPPORT';
+  $('navHR').classList.toggle('hidden', !isHR);
+  $('navIDC').classList.toggle('hidden', isHR);
+  $('roleBadge').textContent = roleName(role);
+  $('userName').textContent = currentUser.name;
+  $('userRole').textContent = isHR ? 'Personal administrativo' : `${currentUser.employee_code} · ${ROLE_TITLES[role]}`;
+  $('userAvatar').textContent = isHR ? 'PA' : currentUser.employee_code.replace(/[^A-Z0-9]/gi, '').slice(-2);
+  $('sideRoleTitle').textContent = isHR ? 'Administración de servicios' : isSupport ? 'Coordinación logística remota' : 'Bandeja del ingeniero de campo';
+  $('sideRoleCopy').textContent = isHR
+    ? 'Publica tickets y supervisa su ciclo completo.'
+    : isSupport
+      ? 'Toma tickets publicados y confirma la logística antes de habilitarlos para los IDC.'
+      : 'Consulta y toma servicios con apoyo logístico confirmado.';
+  const availableNav = $('navIDC').querySelector('[data-page="available"]');
+  const mineNav = $('navIDC').querySelector('[data-page="myTickets"]');
+  availableNav.textContent = isSupport ? 'Tickets por coordinar' : 'Servicios disponibles';
+  mineNav.textContent = isSupport ? 'Mi logística' : 'Mis servicios';
+  const availablePage = $('page-available');
+  availablePage.querySelector('h1').textContent = isSupport ? 'Tickets por coordinar' : 'Servicios disponibles';
+  availablePage.querySelector('.welcome p').textContent = isSupport
+    ? 'Toma tickets publicados por personal administrativo y coordina remotamente la logística antes de habilitarlos para los IDC.'
+    : 'Servicios publicados por personal administrativo y con coordinación logística confirmada.';
+  $('loginScreen').classList.add('hidden');
+  $('appShell').classList.remove('hidden');
+}
+function setSelectedRole(role) {
+  selectedRole = role;
+  $('loginForm').dataset.role = role;
+  $('pickHR').classList.toggle('selected', role === 'HR');
+  $('pickSupport').classList.toggle('selected', role === 'SUPPORT');
+  $('pickIDC').classList.toggle('selected', role === 'IDC');
+  $('idcPickerField').classList.toggle('hidden', role === 'HR');
+  $('roleHint').textContent = role === 'SUPPORT'
+    ? 'Tu cuenta debe tener el rol Ingeniería de apoyo asignado por el administrador de FieldConnect.'
+    : role === 'IDC'
+      ? 'Tu cuenta debe tener el rol IDC asignado por el administrador de FieldConnect.'
+      : 'Tu cuenta debe tener el rol Personal administrativo asignado por el administrador de FieldConnect.';
+  clearLoginError();
+}
+async function fetchProfile(userId) {
+  const { data, error } = await supabaseClient.from('profiles')
+    .select('id, employee_code, name, role')
+    .eq('id', userId)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+async function loadProfiles() {
+  const { data, error } = await supabaseClient.from('profiles').select('id, employee_code, name, role').order('employee_code');
+  if (error) throw error;
+  profileById = {};
+  profileByCode = {};
+  (data || []).forEach((profile) => {
+    profileById[profile.id] = profile;
+    profileByCode[profile.employee_code] = profile;
+  });
+}
+async function loadTickets({ silent = false } = {}) {
+  if (!currentUser || !supabaseClient) return;
+  const { data, error } = await supabaseClient.from('tickets').select('*').order('created_at', { ascending: false });
+  if (error) {
+    if (!silent) toast(`No se pudieron cargar los tickets: ${error.message}`);
+    return;
+  }
+  tickets = (data || []).map(mapTicket);
+  renderAll();
+}
+async function enterApp(authUser, expectedRole = null) {
+  const profile = await fetchProfile(authUser.id);
+  if (!profile) {
+    await supabaseClient.auth.signOut();
+    throw new Error('Tu cuenta todavía no tiene un perfil operativo. Pide al administrador que te registre en public.profiles.');
+  }
+  if (expectedRole && profile.role !== expectedRole) {
+    await supabaseClient.auth.signOut();
+    throw new Error(`Tu cuenta tiene el perfil “${roleName(profile.role)}”, no “${roleName(expectedRole)}”. Selecciona el perfil correcto.`);
+  }
+  if (!['HR', 'SUPPORT', 'IDC'].includes(profile.role)) {
+    await supabaseClient.auth.signOut();
+    throw new Error('El perfil operativo no tiene un rol válido. Contacta al administrador.');
+  }
+  await loadProfiles();
+  currentUser = profile;
+  applyRoleUI();
+  await loadTickets();
+  subscribeRealtime();
+  goPage(profile.role === 'HR' ? 'overview' : 'available');
+}
+async function handleLogin(event) {
+  event.preventDefault();
+  if (!supabaseClient) {
+    loginError('Primero configura la URL y la clave publicable de Supabase en assets/js/supabase-config.js.');
+    return;
+  }
+  clearLoginError();
+  const email = $('loginId').value.trim();
+  const password = $('loginPass').value;
+  const button = $('loginForm').querySelector('button[type="submit"]');
+  button.disabled = true;
+  button.textContent = 'Validando acceso…';
+  try {
+    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    await enterApp(data.user, selectedRole);
+  } catch (error) {
+    loginError(error?.message || 'No se pudo iniciar sesión. Verifica tus credenciales.');
+  } finally {
+    button.disabled = false;
+    button.textContent = 'Entrar a la plataforma →';
+  }
+}
+async function handleLogout() {
+  if (realtimeChannel) {
+    await supabaseClient.removeChannel(realtimeChannel);
+    realtimeChannel = null;
+  }
+  await supabaseClient.auth.signOut();
+  currentUser = null;
+  tickets = [];
+  profileById = {};
+  profileByCode = {};
+  selectedTicketId = null;
+  $('detailOverlay').classList.remove('open');
+  $('appShell').classList.add('hidden');
+  $('loginScreen').classList.remove('hidden');
+  $('loginPass').value = '';
+  setSelectedRole('HR');
+}
+function subscribeRealtime() {
+  if (!supabaseClient || realtimeChannel) return;
+  realtimeChannel = supabaseClient.channel('fieldconnect-live-tickets')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'tickets' }, () => { void loadTickets({ silent: true }); })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'ticket_evidence' }, () => {
+      void loadTickets({ silent: true });
+      if (selectedTicketId && $('detailOverlay').classList.contains('open')) {
+        const current = ticketByCode(selectedTicketId);
+        if (current) void loadTicketEvidence(current);
+      }
+    })
+    .subscribe();
+}
 
-// Export CSV con protección de celdas que podrían interpretarse como fórmulas.
-function exportCSV(name,rows){const quote=v=>{let s=String(v??'');if(/^[\s]*[=+@\-]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"'};const content='\ufeff'+rows.map(r=>r.map(quote).join(',')).join('\r\n');const blob=new Blob([content],{type:'text/csv;charset=utf-8'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);toast('CSV exportado.')}
+function pageMeta(key) {
+  return ({ overview: ['Resumen', 'Centro de operaciones'], tickets: ['Tickets', 'Todos los tickets'], new: ['Crear ticket', 'Alta de servicio'], available: ['Servicios disponibles', 'Bandeja de servicios'], myTickets: ['Mis servicios', 'Agenda personal'] })[key];
+}
+function goPage(key) {
+  if (!pageMeta(key) || !currentUser) return;
+  if (currentUser.role === 'HR' && ['available', 'myTickets'].includes(key)) return;
+  if (currentUser.role !== 'HR' && !['available', 'myTickets'].includes(key)) return;
+  document.querySelectorAll('.page').forEach((el) => el.classList.remove('active'));
+  $('page-' + key).classList.add('active');
+  document.querySelectorAll('[data-page]').forEach((button) => button.classList.toggle('active', button.dataset.page === key));
+  $('crumb').textContent = pageMeta(key)[0];
+  $('topTitle').textContent = pageMeta(key)[1];
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  if (key === 'new') $('fDate').value = $('fDate').value || todayLocalISO();
+}
+function renderTableRow(ticket) {
+  return `<tr data-id="${safe(ticket.id)}">
+    <td><div class="ticket-id">${safe(ticket.id)}</div><div class="td-sub">SITE ID: ${safe(ticket.siteId || '—')}</div></td>
+    <td><div class="td-title">${safe(ticket.client)}</div><div class="td-sub">${safe(ticket.site)} · ${safe(ticket.city)}</div></td>
+    <td><div class="td-title">${safe(ticket.type)}</div><div class="td-sub">${safe(ticket.priority || 'Normal')} prioridad</div></td>
+    <td>${formatDate(ticket.date)}<div class="td-sub">${safe(ticket.time || 'Hora por confirmar')}</div></td>
+    <td>${safe(assignedLabel(ticket))}</td><td>${statusPill(ticket.status)}</td>
+    <td><button class="btn btn-secondary btn-sm" data-detail="${safe(ticket.id)}">Abrir</button></td>
+  </tr>`;
+}
+function renderActivity() {
+  const items = tickets.flatMap((ticket) => (ticket.logs || []).map((entry) => ({ ...entry, ticket: ticket.id })))
+    .sort((a, b) => new Date(b.at || 0) - new Date(a.at || 0)).slice(0, 7);
+  $('activityHR').innerHTML = items.length ? items.map((entry) => `<div class="activity-row"><div class="activity-icon">↻</div><div><strong>${safe(entry.title || 'Movimiento')} · ${safe(entry.ticket)}</strong><p>${safe(entry.desc || '')}</p><p class="muted">${safe(formatLogDate(entry.at))}</p></div></div>`).join('') : '<div class="empty">Aún no hay movimientos.</div>';
+}
+function renderHR() {
+  const availableCount = tickets.filter((t) => t.status === 'Disponible' && !t.assignedToUserId).length;
+  const progressCount = tickets.filter((t) => t.status === 'En progreso').length;
+  const doneCount = tickets.filter((t) => t.status === 'Completado').length;
+  $('hrStats').innerHTML = [
+    ['Tickets totales', tickets.length, 'Servicios registrados', '▤'],
+    ['Disponibles', availableCount, 'Esperan coordinación o asignación', '◉'],
+    ['En ejecución', progressCount, 'Trabajo iniciado', '⚙'],
+    ['Completados', doneCount, 'Servicios cerrados', '✓']
+  ].map((stat) => `<article class="stat"><div class="stat-label">${stat[0]}<span>${stat[3]}</span></div><div class="stat-number">${stat[1]}</div><div class="stat-foot">${stat[2]}</div></article>`).join('');
+  const recent = tickets.filter((t) => matches(t, $('hrSearch').value) && ($('hrStatusFilter').value === 'all' || t.status === $('hrStatusFilter').value));
+  $('hrRows').innerHTML = recent.slice(0, 9).map(renderTableRow).join('');
+  $('hrEmpty').classList.toggle('hidden', recent.length > 0);
+  const all = tickets.filter((t) => matches(t, $('allSearch').value)
+    && ($('allStatus').value === 'all' || t.status === $('allStatus').value)
+    && ($('allType').value === 'all' || t.type === $('allType').value));
+  $('allRows').innerHTML = all.map(renderTableRow).join('');
+  $('allEmpty').classList.toggle('hidden', all.length > 0);
+  renderActivity();
+}
+function typeIcon(type) {
+  return ({ 'Instalación de APS': '⌁', 'Activación de enlace': '⇄', 'Migración a fibra': '◈', Monitoreo: '⌁', 'Levantamiento técnico': '⌖', 'Soporte técnico': '⚙' })[type] || '▤';
+}
+function serviceCard(ticket, mode) {
+  let action = '';
+  if (mode === 'supportAvailable') action = `<button class="btn btn-primary" data-support-claim="${safe(ticket.id)}">Tomar logística</button>`;
+  else if (mode === 'supportMine') action = `<button class="btn btn-secondary" data-detail="${safe(ticket.id)}">Ver ticket y logística</button>`;
+  else if (mode === 'idcAvailable') action = `<button class="btn btn-primary" data-claim="${safe(ticket.id)}">Tomar servicio</button>`;
+  else if (mode === 'idcMine') {
+    if (ticket.status === 'Asignado') action += `<button class="btn btn-primary" data-status="En progreso" data-ticket="${safe(ticket.id)}">Iniciar servicio</button>`;
+    action += `<button class="btn btn-secondary" data-detail="${safe(ticket.id)}">${ticket.status === 'Completado' || ticket.status === 'Cancelado' ? 'Ver reporte' : 'Actualizar / detalle'}</button>`;
+  }
+  return `<article class="service-card">
+    <div class="card-top"><div style="display:flex;gap:11px;min-width:0"><div class="type-icon">${typeIcon(ticket.type)}</div><div><h3>${safe(ticket.type)}</h3><div class="client">${safe(ticket.client)} · ${safe(ticket.id)}</div></div></div>${statusPill(ticket.status)}</div>
+    <div><div class="td-title">${safe(ticket.site)}</div><div class="td-sub">${safe(ticket.city)}</div></div>
+    <div class="meta-grid"><div><div class="meta-label">Fecha y hora</div><div class="meta-value">${formatDate(ticket.date)} · ${safe(ticket.time || 'Por confirmar')}</div></div><div><div class="meta-label">Prioridad</div><div class="meta-value">${safe(ticket.priority || 'Normal')}</div></div><div><div class="meta-label">Viáticos</div><div class="meta-value">${money(ticket.travel)}</div></div><div><div class="meta-label">Pago de servicio</div><div class="meta-value">${money(ticket.fee)}</div></div></div>
+    <div class="card-desc">${safe((ticket.scope || 'Sin alcance registrado').length > 200 ? ticket.scope.slice(0, 200) + '…' : ticket.scope || 'Sin alcance registrado')}</div>
+    <div class="tools-chip"><strong>Herramientas requeridas:</strong><br>${safe(ticket.tools || 'Por confirmar con coordinación')}</div>
+    <div class="card-actions"><button class="btn btn-secondary" data-detail="${safe(ticket.id)}">Ver ticket completo</button>${action}</div>
+  </article>`;
+}
+function renderAvailable() {
+  const isSupport = currentUser.role === 'SUPPORT';
+  const open = tickets.filter((t) => t.status === 'Disponible' && !t.assignedToUserId && (isSupport ? !t.supportEngineerUserId : Boolean(t.supportEngineerUserId)));
+  const query = $('availableSearch').value;
+  const type = $('availableType').value;
+  const filtered = open.filter((t) => matches(t, query) && (type === 'all' || t.type === type));
+  $('availableCards').innerHTML = filtered.map((t) => serviceCard(t, isSupport ? 'supportAvailable' : 'idcAvailable')).join('');
+  $('availableCount').textContent = `${open.length} disponible${open.length === 1 ? '' : 's'}`;
+  $('availableEmpty').classList.toggle('hidden', filtered.length > 0);
+  $('availableEmpty').querySelector('strong').textContent = isSupport ? 'No hay tickets por coordinar' : 'No hay servicios disponibles por ahora';
+  $('availableEmpty').lastChild.textContent = isSupport
+    ? 'Cuando personal administrativo publique un ticket, aparecerá aquí para que ingeniería de apoyo tome la logística.'
+    : 'Aparecerán aquí los tickets con ingeniería de apoyo confirmada.';
+}
+function renderMine() {
+  const isSupport = currentUser.role === 'SUPPORT';
+  const own = tickets.filter((t) => isSupport ? t.supportEngineerUserId === currentUser.id : t.assignedToUserId === currentUser.id);
+  const query = $('mySearch').value;
+  const status = $('myStatus').value;
+  const shown = own.filter((t) => matches(t, query) && (status === 'all' || t.status === status));
+  $('myCards').innerHTML = shown.map((t) => serviceCard(t, isSupport ? 'supportMine' : 'idcMine')).join('');
+  $('myCount').textContent = `${own.length} servicio${own.length === 1 ? '' : 's'}`;
+  $('myEmpty').classList.toggle('hidden', shown.length > 0);
+  $('myEmpty').querySelector('strong').textContent = isSupport ? 'Todavía no tienes tickets de logística' : 'Todavía no tienes servicios asignados';
+  $('myEmpty').lastChild.textContent = isSupport ? 'Puedes revisar la bandeja de tickets por coordinar.' : 'Puedes revisar la bandeja de servicios disponibles.';
+}
+function renderAll() {
+  if (!currentUser) return;
+  if (currentUser.role === 'HR') renderHR();
+  else { renderAvailable(); renderMine(); }
+}
 
-// Validación de fecha y datos económicos al publicar un ticket.
-function createTicket(e){e.preventDefault();if(currentUser?.role!=='HR')return;const val=id=>$(id).value.trim();const date=val('fDate');if(date<todayLocalISO()){toast('La fecha del servicio no puede estar en el pasado.');$('fDate').focus();return}const feeRaw=val('fFee'),travelRaw=val('fTravel');if((feeRaw!==''&&(!Number.isFinite(Number(feeRaw))||Number(feeRaw)<0))||(travelRaw!==''&&(!Number.isFinite(Number(travelRaw))||Number(travelRaw)<0))){toast('Revisa los importes de pago y viáticos.');return}const assign=val('fAssignment');const id='FCG-'+new Date().getFullYear()+'-'+String(Date.now()).slice(-6);const t={id,siteId:val('fSiteId'),project:val('fProject'),client:val('fClient'),site:val('fSite'),city:val('fCity'),address:val('fAddress'),contact:val('fContact'),phone:val('fPhone'),type:val('fType'),date,time:val('fTime'),priority:val('fPriority'),status:'Disponible',assignedTo:null,supportEngineerId:null,scope:val('fScope'),tools:val('fTools'),notes:val('fNotes'),fee:feeRaw===''?null:Number(feeRaw),travel:travelRaw===''?0:Number(travelRaw),payStatus:val('fPayStatus'),checklist:{},evidence:0,closeNote:'',logs:[]};log(t,'Ticket publicado por Personal administrativo','Disponible para que ingeniería de apoyo tome la coordinación logística.');tickets.unshift(t);saveDB();$('ticketForm').reset();$('fTime').value='09:00';$('fTravel').value='0';$('fDate').min=todayLocalISO();$('fType').value='';toast(`Se publicó ${id} para ingeniería de apoyo.`);goPage('tickets')}
+function adminDetailHTML(ticket) {
+  const idcProfiles = Object.values(profileById).filter((profile) => profile.role === 'IDC');
+  return `<div class="form-section" style="margin-top:20px">Administrar ticket</div>
+    <div class="form-grid">
+      <div class="field"><label for="dAssign">Responsable IDC</label><select id="dAssign"><option value="Disponible" ${!ticket.assignedToUserId ? 'selected' : ''}>Sin IDC asignado</option>${idcProfiles.map((p) => `<option value="${safe(p.employee_code)}" ${ticket.assignedToUserId === p.id ? 'selected' : ''}>${safe(p.employee_code)} · ${safe(p.name)}</option>`).join('')}</select></div>
+      <div class="field"><label for="dStatus">Estado</label><select id="dStatus">${STATUSES.map((s) => `<option ${ticket.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
+      <div class="field"><label for="dFee">Pago por servicio (MXN)</label><input id="dFee" type="number" min="0" step=".01" value="${ticket.fee ?? ''}" placeholder="Por confirmar"></div>
+      <div class="field"><label for="dTravel">Viáticos (MXN)</label><input id="dTravel" type="number" min="0" step=".01" value="${Number(ticket.travel) || 0}"></div>
+      <div class="field"><label for="dPayStatus">Estado de pago</label><select id="dPayStatus">${['Por confirmar', 'Acordado', 'Viáticos depositados', 'Pagado'].map((s) => `<option ${ticket.payStatus === s ? 'selected' : ''}>${s}</option>`).join('')}</select></div>
+      <div class="field"><label for="dCloseNote">Notas de RR. HH. / cierre</label><textarea id="dCloseNote">${safe(ticket.closeNote)}</textarea></div>
+    </div>`;
+}
+function detailSummaryHTML(ticket) {
+  return `<div class="detail-grid">
+    <div class="detail-box"><div class="detail-label">Cliente / proyecto</div><div class="detail-value">${safe(ticket.client)}\n${safe(ticket.project || 'Sin proyecto')}\nSITE ID: ${safe(ticket.siteId || '—')}</div></div>
+    <div class="detail-box"><div class="detail-label">Estado / asignación</div><div class="detail-value">${statusPill(ticket.status)}<div style="margin-top:8px">${safe(assignedLabel(ticket))}</div></div></div>
+    <div class="detail-box"><div class="detail-label">Sitio y cita</div><div class="detail-value">${safe(ticket.site)}\n${safe(ticket.city)}\n${safe(ticket.address || 'Domicilio por confirmar')}\n${formatDate(ticket.date)} · ${safe(ticket.time || 'Por confirmar')}</div></div>
+    <div class="detail-box"><div class="detail-label">Contacto</div><div class="detail-value">${safe(ticket.contact || 'Por confirmar')}\n${safe(ticket.phone || 'Teléfono no registrado')}</div></div>
+    <div class="detail-box wide"><div class="detail-label">Alcance técnico</div><div class="detail-value">${safe(ticket.scope || 'Sin alcance registrado')}</div></div>
+    <div class="detail-box wide"><div class="detail-label">Herramientas y materiales</div><div class="detail-value">${safe(ticket.tools || 'Por confirmar')}</div></div>
+    <div class="detail-box"><div class="detail-label">Pago por servicio</div><div class="detail-value">${money(ticket.fee)}</div></div>
+    <div class="detail-box"><div class="detail-label">Viáticos acordados</div><div class="detail-value">${money(ticket.travel)} · ${safe(ticket.payStatus)}</div></div>
+    <div class="detail-box wide"><div class="detail-label">Notas y condiciones</div><div class="detail-value">${safe(ticket.notes || 'Sin notas')}</div></div>
+  </div>`;
+}
+function showDetail(ticket) {
+  selectedTicketId = ticket.id;
+  $('detailTicketId').textContent = ticket.id;
+  $('detailTitle').textContent = ticket.type;
+  $('detailSub').textContent = `${ticket.client} · ${ticket.site} · ${ticket.city}`;
+  let body = detailSummaryHTML(ticket);
+  const isHR = currentUser.role === 'HR';
+  const isOwnIdc = currentUser.role === 'IDC' && ticket.assignedToUserId === currentUser.id;
+  if (isHR) {
+    body += adminDetailHTML(ticket);
+    body += `<div class="form-section" style="margin-top:20px">Evidencias del servicio (${ticket.evidence || 0})</div><div id="evidenceList" class="tools-chip" style="margin:10px 0">Cargando evidencias…</div>`;
+    $('detailActions').innerHTML = `<button class="btn btn-secondary" id="detailExport">Exportar ficha</button><button class="btn btn-primary" id="saveAdminDetail">Guardar cambios</button>`;
+  } else if (currentUser.role === 'IDC') {
+    const checksDisabled = ['Completado', 'Cancelado'].includes(ticket.status) || !isOwnIdc;
+    body += `<div class="form-section" style="margin-top:20px">Checklist de campo</div>
+      <div class="checklist">${CHECKLIST_ITEMS.map((label, i) => `<label class="checkrow"><input type="checkbox" data-check="${i}" ${(ticket.checklist || {})[String(i)] ? 'checked' : ''} ${checksDisabled ? 'disabled' : ''}>${label}</label>`).join('')}</div>
+      <div class="field" style="margin-top:16px"><label for="dIdcNote">Nota de visita / resultado</label><textarea id="dIdcNote" placeholder="Hora de llegada, pruebas, incidencias, pendiente o resultado final…" ${checksDisabled ? 'disabled' : ''}>${safe(ticket.closeNote || '')}</textarea></div>
+      <div class="form-section" style="margin-top:20px">Evidencias del servicio</div>
+      <p class="small muted">Sube fotografías JPEG/PNG/WebP o documentos PDF. Máximo 10 MB por archivo. El servicio no se podrá cerrar hasta tener al menos una evidencia real.</p>
+      <div id="evidenceList" class="tools-chip" style="margin:10px 0">Cargando evidencias…</div>
+      ${isOwnIdc && !checksDisabled ? `<div class="field"><label for="dEvidenceFiles">Agregar fotografías o documentos</label><input id="dEvidenceFiles" type="file" multiple accept="image/jpeg,image/png,image/webp,application/pdf"></div><button class="btn btn-secondary" type="button" id="uploadEvidenceBtn">Subir evidencias</button>` : ''}`;
+    let actions = '';
+    if (!ticket.assignedToUserId && ticket.status === 'Disponible' && ticket.supportEngineerUserId) actions += `<button class="btn btn-primary" id="claimFromDetail">Tomar servicio</button>`;
+    if (isOwnIdc && ticket.status === 'Asignado') actions += `<button class="btn btn-primary" id="startFromDetail">Iniciar servicio</button>`;
+    if (isOwnIdc && !['Completado', 'Cancelado'].includes(ticket.status)) actions += `<button class="btn btn-secondary" id="saveIdcDetail">Guardar avance</button>`;
+    if (isOwnIdc && ticket.status === 'En progreso') actions += `<button class="btn btn-secondary" id="holdFromDetail">Poner en espera</button><button class="btn btn-green" id="completeFromDetail">Cerrar servicio</button>`;
+    if (isOwnIdc && ticket.status === 'En espera') actions += `<button class="btn btn-primary" id="resumeFromDetail">Reanudar servicio</button>`;
+    $('detailActions').innerHTML = actions || '<span class="small muted">Solo lectura</span>';
+  } else {
+    body += `<div class="form-section" style="margin-top:20px">Evidencias del servicio</div><div id="evidenceList" class="tools-chip" style="margin:10px 0">Cargando evidencias…</div>`;
+    $('detailActions').innerHTML = '<span class="small muted">Solo lectura · coordinación logística</span>';
+  }
+  const logs = (ticket.logs || []).slice(0, 12);
+  body += `<section class="history-panel"><div class="history-head"><strong>Historial del ticket</strong><span class="small muted">${(ticket.logs || []).length} movimiento(s)</span></div><div class="history-list">${logs.length ? logs.map((entry) => `<div class="history-item"><span class="history-dot"></span><div><div class="history-title">${safe(entry.title || 'Movimiento')}</div><div class="history-desc">${safe(entry.desc || '')}</div><div class="history-date">${safe(formatLogDate(entry.at))}</div></div></div>`).join('') : '<div class="muted small">Todavía no hay movimientos registrados.</div>'}</div></section>`;
+  $('detailContent').innerHTML = body;
+  $('detailFoot').textContent = isHR ? 'Los permisos de administración se validan en Supabase.' : 'Los cambios y las evidencias se validan en el servidor.';
+  $('detailOverlay').classList.add('open');
+  bindDetailActions(ticket, isHR, isOwnIdc);
+  if ($('evidenceList')) void loadTicketEvidence(ticket);
+}
+function openDetail(code) {
+  const ticket = ticketByCode(code);
+  if (!ticket) return;
+  showDetail(ticket);
+}
+function closeDetail() {
+  $('detailOverlay').classList.remove('open');
+  selectedTicketId = null;
+}
+async function loadTicketEvidence(ticket) {
+  const mount = $('evidenceList');
+  if (!mount || !supabaseClient) return;
+  const { data, error } = await supabaseClient.from('ticket_evidence')
+    .select('id, storage_path, original_name, content_type, size_bytes, created_at')
+    .eq('ticket_id', ticket.dbId).order('created_at', { ascending: false });
+  if (selectedTicketId !== ticket.id || !$('evidenceList')) return;
+  if (error) {
+    $('evidenceList').textContent = `No se pudieron consultar las evidencias: ${error.message}`;
+    return;
+  }
+  if (!data?.length) {
+    $('evidenceList').textContent = 'Todavía no se han subido evidencias.';
+    return;
+  }
+  const links = await Promise.all(data.map(async (item) => {
+    const result = await supabaseClient.storage.from('ticket-evidence').createSignedUrl(item.storage_path, 300);
+    return { ...item, signedUrl: result.data?.signedUrl || null };
+  }));
+  if (selectedTicketId !== ticket.id || !$('evidenceList')) return;
+  $('evidenceList').innerHTML = links.map((item) => {
+    const size = item.size_bytes < 1024 * 1024 ? `${Math.max(1, Math.round(item.size_bytes / 1024))} KB` : `${(item.size_bytes / 1024 / 1024).toFixed(1)} MB`;
+    return `<div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin:5px 0"><span>${safe(item.original_name)} <span class="muted">(${size})</span></span>${item.signedUrl ? `<a href="${safe(item.signedUrl)}" target="_blank" rel="noopener noreferrer">Abrir</a>` : '<span class="muted">Sin acceso</span>'}</div>`;
+  }).join('');
+}
+async function bindDetailActions(ticket, isHR, isOwnIdc) {
+  if (isHR) {
+    $('detailExport').addEventListener('click', () => exportOne(ticket));
+    $('saveAdminDetail').addEventListener('click', () => saveAdminDetail(ticket));
+    return;
+  }
+  if (currentUser.role !== 'IDC') return;
+  const claim = $('claimFromDetail');
+  if (claim) claim.addEventListener('click', () => claimIdcTicket(ticket));
+  const start = $('startFromDetail');
+  if (start) start.addEventListener('click', () => changeMyStatus(ticket, 'En progreso'));
+  const resume = $('resumeFromDetail');
+  if (resume) resume.addEventListener('click', () => changeMyStatus(ticket, 'En progreso'));
+  const save = $('saveIdcDetail');
+  if (save) save.addEventListener('click', () => saveProgress(ticket));
+  const hold = $('holdFromDetail');
+  if (hold) hold.addEventListener('click', async () => {
+    if (await saveProgress(ticket, { keepOpen: true })) await changeMyStatus(ticket, 'En espera');
+  });
+  const complete = $('completeFromDetail');
+  if (complete) complete.addEventListener('click', async () => {
+    if (await saveProgress(ticket, { keepOpen: true })) await changeMyStatus(ticket, 'Completado');
+  });
+  const upload = $('uploadEvidenceBtn');
+  if (upload && isOwnIdc) upload.addEventListener('click', () => uploadEvidence(ticket));
+}
+function checklistFromUI() {
+  const checklist = {};
+  document.querySelectorAll('[data-check]').forEach((checkbox) => { checklist[checkbox.dataset.check] = checkbox.checked; });
+  return checklist;
+}
+async function saveProgress(ticket, { keepOpen = false } = {}) {
+  if (currentUser?.role !== 'IDC' || ticket.assignedToUserId !== currentUser.id) return false;
+  const checklist = checklistFromUI();
+  const note = $('dIdcNote')?.value.trim() || '';
+  const { error } = await supabaseClient.rpc('save_my_ticket_progress', {
+    p_ticket_id: ticket.dbId, p_checklist: checklist, p_close_note: note
+  });
+  if (error) { toast(`No se pudo guardar el avance: ${error.message}`); return false; }
+  await loadTickets({ silent: true });
+  const updated = ticketByCode(ticket.id);
+  if (keepOpen && updated) showDetail(updated); else closeDetail();
+  toast('Avance guardado en Supabase.');
+  return true;
+}
+async function changeMyStatus(ticket, status) {
+  if (currentUser?.role !== 'IDC' || ticket.assignedToUserId !== currentUser.id) return;
+  const { error } = await supabaseClient.rpc('set_my_ticket_status', { p_ticket_id: ticket.dbId, p_status: status });
+  if (error) { toast(error.message || 'No se pudo actualizar el estado.'); return; }
+  await loadTickets({ silent: true });
+  closeDetail();
+  toast(status === 'Completado' ? 'Servicio cerrado con checklist y evidencia validados.' : `Estado actualizado: ${status}.`);
+}
+async function claimSupportTicket(code) {
+  if (currentUser?.role !== 'SUPPORT') return;
+  const ticket = ticketByCode(code);
+  if (!ticket) return;
+  const { error } = await supabaseClient.rpc('claim_support_ticket', { p_ticket_id: ticket.dbId });
+  if (error) { toast(error.message || 'No se pudo tomar la logística.'); await loadTickets({ silent: true }); return; }
+  await loadTickets({ silent: true });
+  goPage('myTickets');
+  toast('Logística asignada. El ticket ya puede aparecer a los IDC.');
+}
+async function claimIdcTicket(ticket) {
+  if (currentUser?.role !== 'IDC') return;
+  const { error } = await supabaseClient.rpc('claim_idc_ticket', { p_ticket_id: ticket.dbId });
+  if (error) { toast(error.message || 'No se pudo tomar el servicio.'); await loadTickets({ silent: true }); return; }
+  await loadTickets({ silent: true });
+  closeDetail();
+  goPage('myTickets');
+  toast('Servicio asignado a tu perfil. Revisa los datos antes de acudir.');
+}
+async function saveAdminDetail(ticket) {
+  if (currentUser?.role !== 'HR') return;
+  const selectedCode = $('dAssign').value;
+  const selectedProfile = selectedCode === 'Disponible' ? null : profileByCode[selectedCode];
+  if (selectedCode !== 'Disponible' && (!selectedProfile || selectedProfile.role !== 'IDC')) {
+    toast('Selecciona un perfil IDC válido.'); return;
+  }
+  const selectedStatus = $('dStatus').value;
+  let finalStatus = selectedStatus;
+  if (!selectedProfile && !['Disponible', 'Cancelado'].includes(finalStatus)) {
+    toast('Asigna un IDC antes de seleccionar ese estado.'); return;
+  }
+  if (selectedProfile && finalStatus === 'Disponible') finalStatus = 'Asignado';
+  const feeRaw = $('dFee').value;
+  const travelRaw = $('dTravel').value;
+  if ((feeRaw !== '' && (!Number.isFinite(Number(feeRaw)) || Number(feeRaw) < 0))
+    || travelRaw === '' || !Number.isFinite(Number(travelRaw)) || Number(travelRaw) < 0) {
+    toast('Revisa los importes de pago y viáticos.'); return;
+  }
+  const payload = {
+    assigned_to: selectedProfile?.id || null,
+    status: finalStatus,
+    fee_mxn: feeRaw === '' ? null : Number(feeRaw),
+    travel_mxn: Number(travelRaw),
+    pay_status: $('dPayStatus').value,
+    close_note: $('dCloseNote').value.trim(),
+    logs: [newLog('Ticket actualizado por personal administrativo', `Estado: ${finalStatus}. Responsable: ${selectedProfile ? selectedProfile.employee_code : 'Sin IDC asignado'}.`), ...(ticket.logs || [])]
+  };
+  const { error } = await supabaseClient.from('tickets').update(payload).eq('id', ticket.dbId);
+  if (error) { toast(`No se pudo guardar el ticket: ${error.message}`); return; }
+  await loadTickets({ silent: true });
+  closeDetail();
+  toast('Ticket actualizado en Supabase.');
+}
+async function uploadEvidence(ticket) {
+  if (currentUser?.role !== 'IDC' || ticket.assignedToUserId !== currentUser.id) return;
+  const input = $('dEvidenceFiles');
+  const files = [...(input?.files || [])];
+  if (!files.length) { toast('Selecciona al menos una fotografía o PDF.'); return; }
+  if (files.some((file) => !ALLOWED_EVIDENCE_TYPES.includes(file.type) || file.size <= 0 || file.size > MAX_EVIDENCE_SIZE)) {
+    toast('Solo se aceptan JPEG, PNG, WebP o PDF de hasta 10 MB por archivo.'); return;
+  }
+  const button = $('uploadEvidenceBtn');
+  button.disabled = true;
+  button.textContent = 'Subiendo…';
+  let uploaded = 0;
+  try {
+    for (const file of files) {
+      const cleanName = file.name.normalize('NFKD').replace(/[^a-zA-Z0-9._-]/g, '_').slice(-100) || 'evidencia';
+      const path = `${ticket.dbId}/${currentUser.id}/${Date.now()}-${crypto.randomUUID().slice(0, 8)}-${cleanName}`;
+      const { error: storageError } = await supabaseClient.storage.from('ticket-evidence').upload(path, file, {
+        cacheControl: '3600', upsert: false, contentType: file.type
+      });
+      if (storageError) throw storageError;
+      const { error: rowError } = await supabaseClient.from('ticket_evidence').insert({
+        ticket_id: ticket.dbId,
+        uploader_id: currentUser.id,
+        storage_path: path,
+        original_name: file.name,
+        content_type: file.type,
+        size_bytes: file.size
+      });
+      if (rowError) {
+        await supabaseClient.storage.from('ticket-evidence').remove([path]);
+        throw rowError;
+      }
+      uploaded += 1;
+    }
+    await loadTickets({ silent: true });
+    const updated = ticketByCode(ticket.id);
+    toast(`${uploaded} evidencia(s) subida(s) correctamente.`);
+    if (updated) showDetail(updated); else closeDetail();
+  } catch (error) {
+    toast(`No se pudieron subir todas las evidencias: ${error.message || 'error desconocido'}`);
+    await loadTickets({ silent: true });
+  } finally {
+    const currentButton = $('uploadEvidenceBtn');
+    if (currentButton) { currentButton.disabled = false; currentButton.textContent = 'Subir evidencias'; }
+  }
+}
+function exportCSV(filename, rows) {
+  const quote = (value) => {
+    let text = String(value ?? '');
+    if (/^[\s]*[=+@\-]/.test(text)) text = "'" + text;
+    return `"${text.replace(/"/g, '""')}"`;
+  };
+  const content = '\ufeff' + rows.map((row) => row.map(quote).join(',')).join('\r\n');
+  const blob = new Blob([content], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url; anchor.download = filename;
+  document.body.appendChild(anchor); anchor.click(); anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  toast('CSV exportado.');
+}
+function exportTickets() {
+  if (currentUser?.role !== 'HR') return;
+  exportCSV('fieldconnect_tickets.csv', [['Ticket', 'SITE ID', 'Cliente', 'Sitio', 'Ciudad', 'Tipo', 'Fecha', 'Hora', 'Estado', 'IDC asignado', 'Ingeniería de apoyo', 'Alcance', 'Herramientas', 'Pago MXN', 'Viáticos MXN', 'Estado pago', 'Nota cierre'],
+    ...tickets.map((t) => [t.id, t.siteId, t.client, t.site, t.city, t.type, t.date, t.time, t.status, t.assignedTo, t.supportEngineerId, t.scope, t.tools, t.fee, t.travel, t.payStatus, t.closeNote])]);
+}
+function exportOne(ticket) {
+  exportCSV(`${ticket.id}_reporte.csv`, [['Campo', 'Valor'], ['Ticket', ticket.id], ['Cliente', ticket.client], ['Sitio', ticket.site], ['Ciudad', ticket.city], ['SITE ID', ticket.siteId], ['Servicio', ticket.type], ['Fecha', ticket.date], ['Hora', ticket.time], ['Estado', ticket.status], ['IDC', ticket.assignedTo], ['Ingeniería de apoyo', ticket.supportEngineerId], ['Alcance', ticket.scope], ['Herramientas', ticket.tools], ['Pago', ticket.fee], ['Viáticos', ticket.travel], ['Estado de pago', ticket.payStatus], ['Checklist', JSON.stringify(ticket.checklist || {})], ['Evidencias registradas', ticket.evidence], ['Nota de cierre', ticket.closeNote]]);
+}
+function resetTicketForm() {
+  $('ticketForm').reset();
+  $('fDate').value = todayLocalISO();
+  $('fDate').min = todayLocalISO();
+  $('fTime').value = '09:00';
+  $('fTravel').value = '0';
+}
+async function createTicket(event) {
+  event.preventDefault();
+  if (currentUser?.role !== 'HR') return;
+  const value = (id) => $(id).value.trim();
+  const date = value('fDate');
+  if (date < todayLocalISO()) { toast('La fecha del servicio no puede estar en el pasado.'); $('fDate').focus(); return; }
+  const feeRaw = value('fFee');
+  const travelRaw = value('fTravel');
+  if ((feeRaw !== '' && (!Number.isFinite(Number(feeRaw)) || Number(feeRaw) < 0))
+    || (travelRaw !== '' && (!Number.isFinite(Number(travelRaw)) || Number(travelRaw) < 0))) {
+    toast('Revisa los importes de pago y viáticos.'); return;
+  }
+  const ticketCode = `FCG-${new Date().getFullYear()}-${crypto.randomUUID().slice(0, 6).toUpperCase()}`;
+  const row = {
+    ticket_code: ticketCode,
+    site_id: value('fSiteId') || null,
+    project: value('fProject') || null,
+    client: value('fClient'), site: value('fSite'), city: value('fCity'),
+    address: value('fAddress') || null, contact: value('fContact'), phone: value('fPhone') || null,
+    service_type: value('fType'), service_date: date, service_time: value('fTime'), priority: value('fPriority'),
+    status: 'Disponible', assigned_to: null, support_engineer_id: null,
+    scope: value('fScope'), tools: value('fTools') || null, notes: value('fNotes') || null,
+    fee_mxn: feeRaw === '' ? null : Number(feeRaw), travel_mxn: travelRaw === '' ? 0 : Number(travelRaw),
+    pay_status: value('fPayStatus'), checklist: {}, evidence_count: 0, close_note: '',
+    logs: [newLog('Ticket publicado por personal administrativo', 'Disponible para que ingeniería de apoyo tome la coordinación logística.')],
+    created_by: currentUser.id
+  };
+  const button = $('ticketForm').querySelector('button[type="submit"]');
+  button.disabled = true;
+  button.textContent = 'Publicando…';
+  const { error } = await supabaseClient.from('tickets').insert(row);
+  button.disabled = false;
+  button.textContent = 'Crear y publicar ticket';
+  if (error) { toast(`No se pudo publicar: ${error.message}`); return; }
+  resetTicketForm();
+  await loadTickets({ silent: true });
+  toast(`Se publicó ${ticketCode} para ingeniería de apoyo.`);
+  goPage('tickets');
+}
 
-// Evita tomar un ticket que ya fue reclamado en otra pestaña del mismo navegador.
-function claimTicket(id){if(currentUser?.role!=='IDC')return;try{const fresh=JSON.parse(localStorage.getItem(DB_KEY)||'null');if(Array.isArray(fresh))tickets=fresh}catch(e){}const t=tickets.find(x=>x.id===id);if(!t)return toast('No se encontró el ticket.');if(t.status!=='Disponible'||t.assignedTo){renderAll();closeDetail();toast('Este servicio ya fue tomado. Actualiza la bandeja.');return}if(!t.supportEngineerId){toast('Este ticket todavía no tiene ingeniería de apoyo asignada.');renderAll();return}t.assignedTo=currentUser.id;t.status='Asignado';log(t,'Servicio tomado por '+currentUser.id,`${currentUser.name} aceptó el servicio con apoyo logístico de ${PEOPLE[t.supportEngineerId]?.name||t.supportEngineerId}.`);saveDB();closeDetail();goPage('myTickets');toast('Servicio asignado a tu perfil. Revisa los datos antes de acudir.')}
-function setStatus(id,status){const t=tickets.find(x=>x.id===id);if(!t)return;if(currentUser?.role==='IDC'&&t.assignedTo!==currentUser.id){toast('Solo puedes actualizar tus propios servicios.');return}const allowed=['Asignado','En progreso','En espera','Completado','Cancelado'];if(currentUser?.role==='IDC'&&!allowed.includes(status)){toast('Ese cambio de estado requiere autorización de RRHH.');return}if(status==='Completado'&&currentUser?.role==='IDC'){const done=Object.values(t.checklist||{}).filter(Boolean).length>=6;if(!done||!String(t.closeNote||'').trim()||Number(t.evidence||0)<1){toast('Para cerrar: completa el checklist, guarda una nota de resultado y registra al menos una evidencia en el detalle del ticket.');openDetail(id);return}}const prior=t.status;t.status=status;if(status==='Completado')t.completedAt=new Date().toISOString();log(t,'Estado actualizado',`${prior} → ${status} por ${currentUser.id}.`);saveDB();if($('detailOverlay').classList.contains('open'))closeDetail();toast('Estado del servicio actualizado.')}
-
-// Timeline e inicios/pausas/reanudaciones desde el detalle del ticket.
-const baseOpenDetailV2=openDetail;
-openDetail=function(id){baseOpenDetailV2(id);const t=tickets.find(x=>x.id===id);if(!t||!$('detailOverlay').classList.contains('open'))return;const logs=(t.logs||[]).slice(0,8);const history=document.createElement('section');history.className='history-panel';history.innerHTML=`<div class="history-head"><strong>Historial del ticket</strong><span class="small muted">${(t.logs||[]).length} movimiento(s)</span></div><div class="history-list">${logs.length?logs.map(l=>`<div class="history-item"><span class="history-dot"></span><div><div class="history-title">${safe(l.title||'Movimiento')}</div><div class="history-desc">${safe(l.desc||'')}</div><div class="history-date">${safe(l.at||'')}</div></div></div>`).join(''):'<div class="muted small">Todavía no hay movimientos registrados.</div>'}</div>`;$('detailContent').appendChild(history);if(currentUser?.role==='IDC'&&t.assignedTo===currentUser.id&&!['Completado','Cancelado'].includes(t.status)){const actions=$('detailActions');const add=(id,label,cls,handler)=>{const b=document.createElement('button');b.id=id;b.className='btn '+cls;b.textContent=label;b.addEventListener('click',handler);actions.appendChild(b)};const saveCurrentForm=()=>{document.querySelectorAll('[data-check]').forEach(ch=>t.checklist[ch.dataset.check]=ch.checked);t.closeNote=$('dIdcNote')?.value.trim()||'';t.evidence=Math.max(0,Number($('dEvidence')?.value)||0)};if(t.status==='En progreso'){add('holdFromDetail','Reportar bloqueo / poner en espera','btn-secondary',()=>{saveCurrentForm();const prev=t.status;t.status='En espera';log(t,'Servicio puesto en espera por '+currentUser.id,t.closeNote||'Se reportó un bloqueo; revisar la nota de visita.');saveDB();closeDetail();toast('Servicio marcado En espera.')});add('completeFromDetail','Cerrar servicio','btn-green',()=>{saveCurrentForm();if(Object.values(t.checklist||{}).filter(Boolean).length<6||!t.closeNote||t.evidence<1){toast('Completa los seis puntos del checklist, escribe el resultado y registra al menos una evidencia.');return}const prev=t.status;t.status='Completado';t.completedAt=new Date().toISOString();log(t,'Servicio completado por '+currentUser.id,'Checklist, resultado y evidencia registrados.');saveDB();closeDetail();toast('Servicio completado y documentado.')})}if(t.status==='En espera'){add('resumeFromDetail','Reanudar servicio','btn-primary',()=>{setStatus(t.id,'En progreso')})}}};
-
-// Permite que RRHH e IDC vean cambios al abrir el mismo archivo en pestañas del mismo navegador.
-window.addEventListener('storage',e=>{if(e.key!==DB_KEY||!e.newValue)return;try{const parsed=JSON.parse(e.newValue);if(!Array.isArray(parsed))return;tickets=parsed.map(normalizeImportedTicket).filter(Boolean);renderAll();if(selectedTicketId&&$('detailOverlay').classList.contains('open'))openDetail(selectedTicketId);toast('Datos actualizados desde otra pestaña.')}catch(err){console.warn('No se pudieron sincronizar los datos locales.',err)}});
-
-// Mantén la fecha mínima alineada a la fecha local y restaura la sesión demo al recargar.
-$('fDate').min=todayLocalISO();
-function restoreSessionV2(){let u=null;try{u=JSON.parse(sessionStorage.getItem(SESSION_KEY)||'null')}catch(e){}if(u?.role==='HR'){currentUser={id:'RRHH',name:'Coordinación RRHH',role:'HR',title:'Recursos Humanos'}}else if(u?.role==='IDC'&&PEOPLE[u.id]){currentUser={...PEOPLE[u.id]}}if(currentUser){$('loginScreen').classList.add('hidden');$('appShell').classList.remove('hidden');applyRole();renderAll();goPage(currentUser.role==='HR'?'overview':'available')}else pickRole('HR')}
-// =================== FIN MEJORAS FUNCIONALES V2 ===================
-
-// La restauración de sesión se ejecuta al final, tras configurar los tres roles.
-
-// Flujo de tres roles: administración publica, apoyo prepara logística, IDC toma después.
-function claimSupportTicket(id){if(currentUser?.role!=='SUPPORT')return;try{const fresh=JSON.parse(localStorage.getItem(DB_KEY)||'null');if(Array.isArray(fresh))tickets=fresh}catch(e){}const t=tickets.find(x=>x.id===id);if(!t)return toast('No se encontró el ticket.');if(t.status!=='Disponible'||t.assignedTo||t.supportEngineerId){renderAll();toast('Otro ingeniero de apoyo ya tomó este ticket.');return}t.supportEngineerId=currentUser.id;log(t,'Ingeniería de apoyo asignada',`${currentUser.name} tomó el ticket para coordinar remotamente la logística previa a la visita IDC.`);saveDB();goPage('myTickets');toast('Logística asignada. El ticket ya puede aparecer a los IDC.');}
-document.addEventListener('click',e=>{const b=e.target.closest('[data-support-claim]');if(b)claimSupportTicket(b.dataset.supportClaim)});
-const restoreSessionRoles=restoreSessionV2;
-restoreSessionV2=function(){let u=null;try{u=JSON.parse(sessionStorage.getItem(SESSION_KEY)||'null')}catch(e){}if(u?.role==='HR'){currentUser={id:'ADMIN',name:'Personal administrativo',role:'HR',title:'Personal administrativo'}}else if((u?.role==='IDC'||u?.role==='SUPPORT')&&PEOPLE[u.id]&&PEOPLE[u.id].role===u.role){currentUser={...PEOPLE[u.id]}}if(currentUser){$('loginScreen').classList.add('hidden');$('appShell').classList.remove('hidden');applyRole();renderAll();goPage(currentUser.role==='HR'?'overview':'available')}else pickRole('HR')};
-
-restoreSessionV2();
+function bindEvents() {
+  $('pickHR').addEventListener('click', () => setSelectedRole('HR'));
+  $('pickSupport').addEventListener('click', () => setSelectedRole('SUPPORT'));
+  $('pickIDC').addEventListener('click', () => setSelectedRole('IDC'));
+  $('loginForm').addEventListener('submit', handleLogin);
+  $('logoutBtn').addEventListener('click', () => { void handleLogout(); });
+  $('ticketForm').addEventListener('submit', (event) => { void createTicket(event); });
+  $('resetFormBtn').addEventListener('click', resetTicketForm);
+  $('fDate').min = todayLocalISO();
+  $('hrSearch').addEventListener('input', renderHR);
+  $('hrStatusFilter').addEventListener('change', renderHR);
+  $('allSearch').addEventListener('input', renderHR);
+  $('allStatus').addEventListener('change', renderHR);
+  $('allType').addEventListener('change', renderHR);
+  $('availableSearch').addEventListener('input', renderAvailable);
+  $('availableType').addEventListener('change', renderAvailable);
+  $('mySearch').addEventListener('input', renderMine);
+  $('myStatus').addEventListener('change', renderMine);
+  $('exportBtn').addEventListener('click', exportTickets);
+  $('detailOverlay').addEventListener('click', (event) => { if (event.target === $('detailOverlay')) closeDetail(); });
+  document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeDetail(); });
+  document.addEventListener('click', (event) => {
+    const pageButton = event.target.closest('[data-page]');
+    if (pageButton) { goPage(pageButton.dataset.page); return; }
+    if (event.target.closest('[data-new]')) { goPage('new'); return; }
+    const detailButton = event.target.closest('[data-detail]');
+    if (detailButton) { openDetail(detailButton.dataset.detail); return; }
+    const supportClaim = event.target.closest('[data-support-claim]');
+    if (supportClaim) { void claimSupportTicket(supportClaim.dataset.supportClaim); return; }
+    const idcClaim = event.target.closest('[data-claim]');
+    if (idcClaim) { const ticket = ticketByCode(idcClaim.dataset.claim); if (ticket) void claimIdcTicket(ticket); return; }
+    const statusButton = event.target.closest('[data-status][data-ticket]');
+    if (statusButton) {
+      const ticket = ticketByCode(statusButton.dataset.ticket);
+      if (ticket) void changeMyStatus(ticket, statusButton.dataset.status);
+      return;
+    }
+    const closeButton = event.target.closest('[data-close]');
+    if (closeButton) closeDetail();
+    const row = event.target.closest('tr[data-id]');
+    if (row && !event.target.closest('button') && currentUser?.role === 'HR') openDetail(row.dataset.id);
+  });
+}
+bindEvents();
+(function boot() {
+  const config = window.FIELD_CONNECT_SUPABASE || {};
+  const valid = /^https:\/\/[a-z0-9-]+\.supabase\.co$/i.test(config.url || '')
+    && typeof config.publishableKey === 'string' && config.publishableKey.length > 20
+    && !String(config.publishableKey).includes('TU_CLAVE');
+  if (!window.supabase?.createClient) {
+    loginError('No se pudo cargar el cliente Supabase. Comprueba tu conexión a internet y vuelve a cargar.');
+    return;
+  }
+  if (!valid) {
+    setSelectedRole('HR');
+    loginError('Falta configurar Supabase: edita assets/js/supabase-config.js con la URL de proyecto y la clave publishable.');
+    return;
+  }
+  supabaseClient = window.supabase.createClient(config.url, config.publishableKey, {
+    auth: { autoRefreshToken: true, persistSession: true, detectSessionInUrl: true }
+  });
+  supabaseClient.auth.getSession().then(async ({ data, error }) => {
+    if (error) { loginError(`No se pudo recuperar la sesión: ${error.message}`); return; }
+    if (data.session?.user) {
+      try { await enterApp(data.session.user); }
+      catch (err) { loginError(err?.message || 'No se pudo restaurar el acceso.'); }
+    } else setSelectedRole('HR');
+  }).catch((error) => loginError(error?.message || 'No se pudo conectar con Supabase.'));
+})();
